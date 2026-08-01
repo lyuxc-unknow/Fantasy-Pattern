@@ -1,0 +1,161 @@
+ plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.143'
+    id 'idea'
+}
+
+tasks.named('wrapper', Wrapper).configure {
+    distributionType = Wrapper.DistributionType.BIN
+}
+
+version = mod_version
+group = mod_group_id
+
+sourceSets.main.resources {
+    srcDir('src/generated/resources')
+    exclude("**/*.bbmodel")
+    exclude("src/generated/**/.cache")
+}
+
+
+ base {
+     archivesName = mod_id
+ }
+
+ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+ neoForge {
+     version = project.neo_version
+
+     parchment {
+         mappingsVersion = project.parchment_mappings_version
+         minecraftVersion = project.parchment_minecraft_version
+     }
+
+     runs {
+         client {
+             client()
+             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+         }
+
+         server {
+             server()
+             programArgument '--nogui'
+             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+         }
+
+         gameTestServer {
+             type = "gameTestServer"
+             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+         }
+
+         data {
+             data()
+             // gameDirectory = project.file('run-data')
+
+             programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+         }
+
+         configureEach {
+             systemProperty 'forge.logging.markers', 'REGISTRIES'
+             logLevel = org.slf4j.event.Level.DEBUG
+         }
+     }
+
+     mods {
+         "${mod_id}" {
+             sourceSet(sourceSets.main)
+         }
+     }
+ }
+
+ configurations {
+     runtimeClasspath.extendsFrom localRuntime
+ }
+repositories {
+    // GuideME (required AE2 dependency) is published to Maven Central
+    mavenCentral()
+    // AE2 for NeoForge 1.21.1 is published on the Modrinth Maven
+    maven {
+         name = 'Modrinth'
+         url = 'https://api.modrinth.com/maven'
+         content {
+             includeGroup 'maven.modrinth'
+         }
+    }
+    // JEI
+    maven {
+         name = 'Jared Maven'
+         url = 'https://maven.blamejared.com'
+         content {
+             includeGroup 'mezz.jei'
+         }
+    }
+    maven {
+        name = "LowDragMC"
+        url = "https://maven.firstdark.dev/snapshots"
+    }
+}
+
+ dependencies {
+     // Applied Energistics 2: compile against the mod jar, and load the full mod in dev runs
+     compileOnly "maven.modrinth:ae2:${ae2_version}"
+     // We add the full version to localRuntime, not runtimeOnly, so that we do not publish a dependency on it
+     localRuntime "maven.modrinth:ae2:${ae2_version}"
+     // GuideME is a required dependency of AE2 and must be present in dev runs
+     localRuntime "org.appliedenergistics:guideme:${guideme_version}"
+
+     // JEI: compile against the API, include the full mod in dev runs
+     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
+     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
+     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+
+     implementation("com.lowdragmc.ldlib2:ldlib2-neoforge-${minecraft_version}:${ldlib2_version}:all")
+
+ }
+
+ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+     var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            ae2_version            : ae2_version,
+            ldlib2_version         : ldlib2_version,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}

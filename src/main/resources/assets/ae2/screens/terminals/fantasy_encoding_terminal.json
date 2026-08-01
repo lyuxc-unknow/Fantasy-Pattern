@@ -1,0 +1,83 @@
+{
+  "$schema": "../schema.json",
+  "includes": [
+    "terminal.json"
+  ],
+  "slots": {
+    "PROCESSING_INPUTS": {
+      "left": 24,
+      "bottom": 158,
+      "grid": "BREAK_AFTER_3COLS"
+    },
+    "PROCESSING_OUTPUTS": {
+      "left": 96,
+      "bottom": 158,
+      "grid": "BREAK_AFTER_2COLS"
+    },
+    "BLANK_PATTERN": {
+      "left": 147,
+      "bottom": 165
+    },
+    "ENCODED_PATTERN": {
+      "left": 147,
+      "bottom": 118
+    }
+  },
+  "text": {
+    "dialog_title": {
+      "text": {
+        "translate": "item.fantasy_technology.fantasy_encoding_terminal"
+      },
+      "position": {
+        "left": 8,
+        "top": 6
+      }
+    },
+    "crafting_grid_title": {
+      "text": {
+        "translate": "gui.fantasy_technology.pattern_encoding"
+      },
+      "position": {
+        "left": 8,
+        "bottom": 177
+      }
+    }
+  },
+  "terminalStyle": {
+    "header": {
+      "texture": "guis/pattern.png",
+      "srcRect": [0, 0, 195, 17]
+    },
+    "firstRow": {
+      "texture": "guis/pattern.png",
+      "srcRect": [0, 17, 195, 18]
+    },
+    "row": {
+      "texture": "guis/pattern.png",
+      "srcRect": [0, 35, 195, 18]
+    },
+    "lastRow": {
+      "texture": "guis/pattern.png",
+      "srcRect": [0, 53, 195, 18]
+    },
+    "bottom": {
+      "texture": "guis/pattern.png",
+      "srcRect": [0, 71, 195, 180]
+    }
+  },
+  "widgets": {
+    "inputScrollbar": {
+      "left": 15,
+      "bottom": 158,
+      "height": 52
+    },
+    "clearPattern": {
+      "left": 79,
+      "bottom": 159
+    },
+    "encodePattern": {
+      "left": 147,
+      "bottom": 145
+    }
+  }
+}

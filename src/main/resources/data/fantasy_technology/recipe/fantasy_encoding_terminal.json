@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "Q": {
+      "item": "ae2:quartz_glass"
+    },
+    "P": {
+      "item": "ae2:engineering_processor"
+    },
+    "C": {
+      "item": "minecraft:crafting_table"
+    }
+  },
+  "pattern": [
+    "QPQ",
+    "PCP",
+    "QPQ"
+  ],
+  "result": {
+    "count": 1,
+    "id": "fantasy_technology:fantasy_encoding_terminal"
+  }
+}
