@@ -92,10 +92,6 @@ repositories {
              includeGroup 'mezz.jei'
          }
     }
-    maven {
-        name = "LowDragMC"
-        url = "https://maven.firstdark.dev/snapshots"
-    }
 }
 
  dependencies {
@@ -111,8 +107,6 @@ repositories {
      compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
      localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 
-     implementation("com.lowdragmc.ldlib2:ldlib2-neoforge-${minecraft_version}:${ldlib2_version}:all")
-
  }
 
  var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -126,7 +120,6 @@ repositories {
             mod_license            : mod_license,
             mod_version            : mod_version,
             ae2_version            : ae2_version,
-            ldlib2_version         : ldlib2_version,
     ]
     inputs.properties replaceProperties
     expand replaceProperties

@@ -2,7 +2,6 @@ package cn.lyxc.fantasytechnology.registry;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
-import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -25,8 +24,7 @@ public final class FTMenus {
             .register("fantasy_encoding_terminal", () -> FantasyEncodingTermMenu.TYPE);
 
     public static final DeferredHolder<MenuType<?>, MenuType<FantasyAnnihilationMenu>> FANTASY_ANNIHILATION = REGISTER
-            .register("fantasy_annihilation",
-                    () -> IMenuTypeExtension.create(FantasyAnnihilationMenu::new));
+            .register("fantasy_annihilation", () -> FantasyAnnihilationMenu.TYPE);
 
     /** Forces class loading so the static registrations above run. */
     public static void init() {

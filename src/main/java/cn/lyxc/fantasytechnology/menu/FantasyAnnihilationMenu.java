@@ -1,46 +1,37 @@
 package cn.lyxc.fantasytechnology.menu;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.MenuType;
 
-import com.lowdragmc.lowdraglib2.gui.factory.IContainerUIHolder;
-import com.lowdragmc.lowdraglib2.gui.holder.ModularUIContainerMenu;
+import appeng.menu.AEBaseMenu;
+import appeng.menu.SlotSemantics;
+import appeng.menu.implementations.MenuTypeBuilder;
+import appeng.menu.slot.AppEngSlot;
 
+import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
-import cn.lyxc.fantasytechnology.registry.FTMenus;
-import cn.lyxc.fantasytechnology.ui.FantasyAnnihilationUI;
 
 /**
- * Menu of the fantasy annihilation block.
+ * Menu of the fantasy annihilation block, in the style of AE2's own machine menus (see {@code SkyChestMenu}).
  *
- * The slot layout lives in {@link FantasyAnnihilationUI}; LDLib registers a container slot for every {@code ItemSlot}
- * element of the modular UI and derives shift-click behaviour from their slot styles.
+ * Built unregistered so the type can live in this mod's {@code DeferredRegister} rather than AE2's internal
+ * registration queue; the block entity is the menu host and is resolved from the open position on the client.
  */
-public class FantasyAnnihilationMenu extends ModularUIContainerMenu {
+public class FantasyAnnihilationMenu extends AEBaseMenu {
 
-    /** Server-side constructor, used by the block entity's MenuProvider. */
-    public FantasyAnnihilationMenu(int containerId, Inventory playerInventory,
-            FantasyAnnihilationBlockEntity annihilation) {
-        super(menuType(), containerId, playerInventory, annihilation);
-    }
+    public static final MenuType<FantasyAnnihilationMenu> TYPE = MenuTypeBuilder
+            .create(FantasyAnnihilationMenu::new, FantasyAnnihilationBlockEntity.class)
+            .buildUnregistered(ResourceLocation.fromNamespaceAndPath(FantasyTechnology.MODID, "fantasy_annihilation"));
 
-    /** Client-side constructor, used by the menu type factory with the block position from the buffer. */
-    public FantasyAnnihilationMenu(int containerId, Inventory playerInventory, RegistryFriendlyByteBuf buffer) {
-        super(menuType(), containerId, playerInventory, holderAt(playerInventory, buffer.readBlockPos()));
-    }
+    public FantasyAnnihilationMenu(int id, Inventory playerInventory, FantasyAnnihilationBlockEntity annihilation) {
+        super(TYPE, id, playerInventory, annihilation);
 
-    private static IContainerUIHolder holderAt(Inventory playerInventory, BlockPos pos) {
-        if (playerInventory.player.level().getBlockEntity(pos) instanceof FantasyAnnihilationBlockEntity annihilation) {
-            return annihilation;
+        var patternInv = annihilation.getPatternInv();
+        for (int i = 0; i < patternInv.size(); i++) {
+            addSlot(new AppEngSlot(patternInv, i), SlotSemantics.ENCODED_PATTERN);
         }
-        // The block entity is gone (or not synced yet): show nothing rather than crashing; stillValid closes the menu.
-        return EmptyUIHolder.INSTANCE;
-    }
 
-    @SuppressWarnings("unchecked")
-    private static MenuType<ModularUIContainerMenu> menuType() {
-        return (MenuType<ModularUIContainerMenu>) (MenuType<?>) FTMenus.FANTASY_ANNIHILATION.get();
+        createPlayerInventorySlots(playerInventory);
     }
 }

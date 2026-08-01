@@ -1,17 +1,27 @@
 package cn.lyxc.fantasytechnology.client.screen;
 
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.player.Inventory;
-
+import appeng.api.client.AEKeyRendering;
 import appeng.api.config.ActionItems;
+import appeng.api.stacks.AEFluidKey;
+import appeng.api.stacks.AEKey;
+import appeng.client.Point;
 import appeng.client.gui.me.common.MEStorageScreen;
 import appeng.client.gui.style.ScreenStyle;
 import appeng.client.gui.widgets.ActionButton;
 import appeng.client.gui.widgets.Scrollbar;
+import appeng.core.localization.ButtonToolTips;
+import appeng.core.localization.Tooltips;
+import appeng.items.misc.WrappedGenericStack;
 import appeng.menu.SlotSemantics;
 import appeng.menu.slot.FakeSlot;
-
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
+import net.minecraft.client.renderer.Rect2i;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Screen of the fantasy encoding terminal.
@@ -52,6 +62,59 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
         inputScrollbar = widgets.addScrollBar("inputScrollbar", Scrollbar.SMALL);
         inputScrollbar.setRange(0, menu.getInputSlots().length / INPUT_COLUMNS - VISIBLE_ROWS, VISIBLE_ROWS);
         inputScrollbar.setCaptureMouseWheel(false);
+    }
+
+    /**
+     * The ME network list's scrollbar asks for every mouse wheel event on the screen, which would leave the
+     * ingredient list below with no way to scroll at all. Hand the wheel to the ingredient list while the cursor is
+     * over it, and let everything else fall through to AE2's default handling.
+     */
+    @Override
+    public boolean mouseScrolled(double x, double y, double deltaX, double deltaY) {
+        if (deltaY != 0 && isOverIngredients(x, y)) {
+            inputScrollbar.onMouseWheel(new Point((int) x - leftPos, (int) y - topPos), deltaY);
+            return true;
+        }
+        return super.mouseScrolled(x, y, deltaX, deltaY);
+    }
+
+    /**
+     * Whether the cursor is over the ingredient area - the visible slot window or the scrollbar next to it.
+     *
+     * The hit test has to happen here: {@link Scrollbar#onMouseWheel} ignores the point it is handed and scrolls
+     * unconditionally, because AE2 normally does the hit testing one level up in the widget container, which this
+     * override bypasses.
+     */
+    private boolean isOverIngredients(double x, double y) {
+        Rect2i scrollbar = inputScrollbar.getBounds();
+        if (scrollbar.contains((int) x - leftPos, (int) y - topPos)) {
+            return true;
+        }
+        for (FakeSlot slot : menu.getInputSlots()) {
+            if (slot.isActive() && isHovering(slot.x, slot.y, 16, 16, x, y)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Fluid entries in the ingredient and result ghost slots are stored as {@link WrappedGenericStack}, whose vanilla
+     * tooltip is just the wrapper item's name - no fluid, no amount. Replace it with the fluid's own tooltip plus a
+     * formatted amount line, matching what the ME network view shows for fluids. Item entries pass through unchanged.
+     */
+    @Override
+    protected List<Component> getTooltipFromContainerItem(ItemStack stack) {
+        if (stack.getItem() instanceof WrappedGenericStack wrapped) {
+            AEKey what = wrapped.unwrapWhat(stack);
+            if (what instanceof AEFluidKey) {
+                List<Component> tooltip = new ArrayList<>(AEKeyRendering.getTooltip(what));
+                tooltip.add(Tooltips.getAmountTooltip(ButtonToolTips.StoredAmount, what,
+                        wrapped.unwrapAmount(stack)));
+                return tooltip;
+            }
+        }
+        return super.getTooltipFromContainerItem(stack);
     }
 
     @Override

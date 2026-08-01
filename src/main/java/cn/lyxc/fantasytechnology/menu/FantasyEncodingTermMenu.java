@@ -7,6 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 import appeng.api.inventories.InternalInventory;
@@ -148,6 +149,27 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
     private boolean isPreviewSlot(int slotId) {
         return slotId >= 0 && slotId < slots.size() && slots.get(slotId) instanceof PreviewSlot;
+    }
+
+    /**
+     * Shift-clicking a fantasy pattern in the player inventory should fill the pattern slots first, not the ME network
+     * storage. Unencoded patterns go into the blank pattern slot, encoded ones into the encoded pattern slot; whatever
+     * does not fit falls back to the network like any other item.
+     *
+     * Note: {@link Slot#safeInsert} modifies and returns the passed stack, so a copy is inserted and the original
+     * {@code input} is kept intact for the placed-amount calculation and the fallback to the network.
+     */
+    @Override
+    protected int transferStackToMenu(ItemStack input) {
+        if (input.getItem() instanceof FantasyPatternItem) {
+            AppEngSlot target = FantasyPatternItem.isEncoded(input) ? encodedPatternSlot : blankPatternSlot;
+            ItemStack remainder = target.safeInsert(input.copy());
+            int placed = input.getCount() - remainder.getCount();
+            if (placed > 0) {
+                return placed;
+            }
+        }
+        return super.transferStackToMenu(input);
     }
 
     // ------------------------------------------------------------------------

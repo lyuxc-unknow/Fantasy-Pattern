@@ -1,8 +1,8 @@
 {
   "parent": "ae2:part/display_off",
   "textures": {
-    "lightsBright": "ae2:part/pattern_encoding_terminal_bright",
-    "lightsMedium": "ae2:part/pattern_encoding_terminal_medium",
-    "lightsDark": "ae2:part/pattern_encoding_terminal_dark"
+    "lightsBright": "fantasy_technology:part/fantasy_encoding_terminal_bright",
+    "lightsMedium": "fantasy_technology:part/fantasy_encoding_terminal_medium",
+    "lightsDark": "fantasy_technology:part/fantasy_encoding_terminal_dark"
   }
 }

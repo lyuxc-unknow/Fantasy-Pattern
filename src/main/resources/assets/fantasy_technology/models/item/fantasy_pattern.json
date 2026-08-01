@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "ae2:item/blank_pattern"
+    "layer0": "fantasy_technology:item/fantasy_pattern"
   }
 }

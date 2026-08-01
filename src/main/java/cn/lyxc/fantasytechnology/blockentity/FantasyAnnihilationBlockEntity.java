@@ -12,16 +12,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.Container;
-import net.minecraft.world.MenuProvider;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-
-import com.lowdragmc.lowdraglib2.gui.factory.IContainerUIHolder;
-import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
 
 import appeng.api.config.Actionable;
 import appeng.api.crafting.IPatternDetails;
@@ -46,10 +38,8 @@ import appeng.util.inv.filter.IAEItemFilter;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
-import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
 import cn.lyxc.fantasytechnology.registry.FTBlockEntities;
 import cn.lyxc.fantasytechnology.registry.FTBlocks;
-import cn.lyxc.fantasytechnology.ui.FantasyAnnihilationUI;
 
 /**
  * The fantasy annihilation block ("幻梦寂灭"). An ME autocrafting device holding fantasy patterns:
@@ -60,9 +50,9 @@ import cn.lyxc.fantasytechnology.ui.FantasyAnnihilationUI;
  * block executes as many crafting operations per tick as the CPU requests.
  */
 public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
-        implements ICraftingProvider, PatternContainer, MenuProvider, IContainerUIHolder, IGridTickable {
+        implements ICraftingProvider, PatternContainer, IGridTickable {
 
-    public static final int PATTERN_SLOTS = 9;
+    public static final int PATTERN_SLOTS = 36;
 
     /** Idle power draw while connected to a grid (AE/t). */
     private static final double IDLE_POWER_USAGE = 1.0;
@@ -281,28 +271,15 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     }
 
     // ------------------------------------------------------------------------
-    // Menu / UI
+    // Multiblock (reserved)
     // ------------------------------------------------------------------------
 
-    @Override
-    public Component getDisplayName() {
-        return FTBlocks.FANTASY_ANNIHILATION.get().getName();
-    }
-
-    @Override
-    public ModularUI createUI(Player player) {
-        return FantasyAnnihilationUI.create(this, player);
-    }
-
-    @Override
-    public boolean isStillValid(Player player) {
-        return Container.stillValidBlockEntity(this, player);
-    }
-
-    @Nullable
-    @Override
-    public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
-        return new FantasyAnnihilationMenu(containerId, playerInventory, this);
+    /**
+     * Whether the surrounding multiblock structure is complete. Reserved for a future multiblock layout - for now the
+     * structure is always considered formed, so the block works standalone exactly like before.
+     */
+    public boolean isStructureFormed() {
+        return true;
     }
 
     /**

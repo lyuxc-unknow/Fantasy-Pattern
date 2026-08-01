@@ -1,23 +1,20 @@
 package cn.lyxc.fantasytechnology.item;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import org.jetbrains.annotations.Nullable;
-
+import appeng.api.stacks.AEKey;
+import appeng.api.stacks.GenericStack;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
-import appeng.api.stacks.AEKey;
-import appeng.api.stacks.GenericStack;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * The recipe stored in a fantasy pattern: a list of ingredients and a list of results, in the shape of an AE2
@@ -116,14 +113,15 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
         // stored as the representative.
         @Override
         public boolean equals(Object obj) {
-            if (!(obj instanceof IngredientKey other)) {
+            if (!(obj instanceof IngredientKey(ResourceLocation otherTag, AEKey otherRepresentative))) {
                 return false;
             }
-            if (tag != null || other.tag != null) {
-                return tag != null && other.tag != null && tag.equals(other.tag)
-                        && representative.getType() == other.representative.getType();
+            if (tag != null || otherTag != null) {
+                // equals() on a non-null tag already rules out the other one being null.
+                return tag != null && tag.equals(otherTag)
+                        && representative.getType() == otherRepresentative.getType();
             }
-            return representative.equals(other.representative);
+            return representative.equals(otherRepresentative);
         }
 
         @Override

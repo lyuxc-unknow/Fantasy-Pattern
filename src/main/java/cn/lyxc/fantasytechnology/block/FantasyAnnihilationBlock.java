@@ -4,7 +4,6 @@ import org.jetbrains.annotations.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -15,7 +14,11 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
+import appeng.menu.MenuOpener;
+import appeng.menu.locator.MenuLocators;
+
 import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
+import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
 
 /**
  * The fantasy annihilation block ("幻梦寂灭"). See {@link FantasyAnnihilationBlockEntity} for the crafting logic.
@@ -47,9 +50,11 @@ public class FantasyAnnihilationBlock extends Block implements EntityBlock {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
             BlockHitResult hitResult) {
-        if (level.getBlockEntity(pos) instanceof MenuProvider provider) {
+        if (level.getBlockEntity(pos) instanceof FantasyAnnihilationBlockEntity annihilation) {
             if (!level.isClientSide()) {
-                player.openMenu(provider, pos);
+                // Opened through AE2's locator mechanism so the client can resolve the block entity back from the
+                // menu's network packet.
+                MenuOpener.open(FantasyAnnihilationMenu.TYPE, player, MenuLocators.forBlockEntity(annihilation));
             }
             return InteractionResult.sidedSuccess(level.isClientSide());
         }

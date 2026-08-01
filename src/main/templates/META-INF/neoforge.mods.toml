@@ -36,13 +36,6 @@ Fantasy Technology
     side="BOTH"
 
 [[dependencies.${mod_id}]]
-    modId="ldlib2"
-    type="required"
-    versionRange="[${ldlib2_version},)"
-    ordering="AFTER"
-    side="BOTH"
-
-[[dependencies.${mod_id}]]
     modId="jei"
     type="optional"
     versionRange="[19,)"
