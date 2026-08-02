@@ -1,7 +1,7 @@
 package cn.lyxc.fantasytechnology.registry;
 
-import java.util.function.Supplier;
-
+import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.block.FantasyAnnihilationBlock;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
@@ -10,8 +10,7 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
 import net.neoforged.neoforge.registries.DeferredBlock;
 
-import cn.lyxc.fantasytechnology.FantasyTechnology;
-import cn.lyxc.fantasytechnology.block.FantasyAnnihilationBlock;
+import java.util.function.Supplier;
 
 public final class FTBlocks {
     private FTBlocks() {
@@ -36,7 +35,7 @@ public final class FTBlocks {
         return holder;
     }
 
-    /** Forces class loading so the static registrations above run. */
+    /// Forces class loading so the static registrations above run.
     public static void init() {
     }
 }

@@ -1,15 +1,5 @@
 package cn.lyxc.fantasytechnology.menu;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.inventory.MenuType;
-import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
-
 import appeng.api.inventories.InternalInventory;
 import appeng.api.stacks.GenericStack;
 import appeng.helpers.InventoryAction;
@@ -19,32 +9,36 @@ import appeng.menu.me.common.MEStorageMenu;
 import appeng.menu.slot.AppEngSlot;
 import appeng.menu.slot.FakeSlot;
 import appeng.util.ConfigInventory;
-
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
 import cn.lyxc.fantasytechnology.part.FantasyEncodingTerminalPart;
 import cn.lyxc.fantasytechnology.part.IFantasyEncodingTerminalHost;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
 
-/**
- * Menu of the fantasy encoding terminal, shaped like AE2's processing pattern mode.
- *
- * Built on AE2's {@link MEStorageMenu}, so it carries the full ME network item list on top of the encoding area.
- *
- * The ingredient slots are preview-only: they are filled by transferring a recipe and cannot be edited by hand,
- * because an ingredient may carry a tag that a slot has no way to represent. The result slots are ordinary ghost
- * slots and can be edited freely.
- *
- * Slot positions come from the screen style at
- * {@code assets/ae2/screens/terminals/fantasy_encoding_terminal.json}, matched up by slot semantic.
- */
+import java.util.ArrayList;
+import java.util.List;
+
+/// Menu of the fantasy encoding terminal, shaped like AE2's processing pattern mode.
+///
+/// Built on AE2's {@link MEStorageMenu}, so it carries the full ME network item list on top of the encoding area.
+///
+/// The ingredient slots are preview-only: they are filled by transferring a recipe and cannot be edited by hand,
+/// because an ingredient may carry a tag that a slot has no way to represent. The result slots are ordinary ghost
+/// slots and can be edited freely.
+///
+/// Slot positions come from the screen style at
+/// {@code assets/ae2/screens/terminals/fantasy_encoding_terminal.json}, matched up by slot semantic.
 public class FantasyEncodingTermMenu extends MEStorageMenu {
 
-    /**
-     * Built unregistered so we can put it into our own {@code DeferredRegister} rather than depending on AE2's
-     * internal registration queue running after ours.
-     */
+    /// Built unregistered so we can put it into our own {@code DeferredRegister} rather than depending on AE2's
+    /// internal registration queue running after ours.
     public static final MenuType<FantasyEncodingTermMenu> TYPE = MenuTypeBuilder
             .create(FantasyEncodingTermMenu::new, IFantasyEncodingTerminalHost.class)
             .buildUnregistered(ResourceLocation.fromNamespaceAndPath(FantasyTechnology.MODID,
@@ -61,7 +55,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     private final AppEngSlot blankPatternSlot;
     private final AppEngSlot encodedPatternSlot;
 
-    /** Last seen contents of the encoded pattern slot, so a newly inserted pattern is decoded exactly once. */
+    /// Last seen contents of the encoded pattern slot, so a newly inserted pattern is decoded exactly once.
     private ItemStack lastEncodedPattern = ItemStack.EMPTY;
 
     public FantasyEncodingTermMenu(int id, Inventory playerInventory, IFantasyEncodingTerminalHost host) {
@@ -100,12 +94,12 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         return terminalHost;
     }
 
-    /** The ingredient slots, in grid order; the screen scrolls a 3x3 window over them. */
+    /// The ingredient slots, in grid order; the screen scrolls a 3x3 window over them.
     public FakeSlot[] getInputSlots() {
         return inputSlots;
     }
 
-    /** The result slots, shown as a fixed 3x3 block. */
+    /// The result slots, shown as a fixed 3x3 block.
     public FakeSlot[] getOutputSlots() {
         return outputSlots;
     }
@@ -123,10 +117,8 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         super.broadcastChanges();
     }
 
-    /**
-     * AE2 routes clicks on ghost slots through here rather than through the vanilla click handling, including the
-     * paths that call {@code Slot#set} directly. Ingredient slots are preview-only, so drop anything aimed at them.
-     */
+    /// AE2 routes clicks on ghost slots through here rather than through the vanilla click handling, including the
+    /// paths that call {@code Slot#set} directly. Ingredient slots are preview-only, so drop anything aimed at them.
     @Override
     public void doAction(ServerPlayer player, InventoryAction action, int slotId, long id) {
         if (isPreviewSlot(slotId)) {
@@ -135,10 +127,8 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         super.doAction(player, action, slotId, id);
     }
 
-    /**
-     * The other half of the ghost-slot protocol: dropping an item onto a ghost slot sends SET_FILTER, which lands here
-     * instead of in {@link #doAction}. Ingredient slots ignore it.
-     */
+    /// The other half of the ghost-slot protocol: dropping an item onto a ghost slot sends SET_FILTER, which lands here
+    /// instead of in {@link #doAction}. Ingredient slots ignore it.
     @Override
     public void setFilter(int slotIndex, ItemStack stack) {
         if (isPreviewSlot(slotIndex)) {
@@ -151,14 +141,12 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         return slotId >= 0 && slotId < slots.size() && slots.get(slotId) instanceof PreviewSlot;
     }
 
-    /**
-     * Shift-clicking a fantasy pattern in the player inventory should fill the pattern slots first, not the ME network
-     * storage. Unencoded patterns go into the blank pattern slot, encoded ones into the encoded pattern slot; whatever
-     * does not fit falls back to the network like any other item.
-     *
-     * Note: {@link Slot#safeInsert} modifies and returns the passed stack, so a copy is inserted and the original
-     * {@code input} is kept intact for the placed-amount calculation and the fallback to the network.
-     */
+    /// Shift-clicking a fantasy pattern in the player inventory should fill the pattern slots first, not the ME network
+    /// storage. Unencoded patterns go into the blank pattern slot, encoded ones into the encoded pattern slot; whatever
+    /// does not fit falls back to the network like any other item.
+    ///
+    /// Note: {@link Slot#safeInsert} modifies and returns the passed stack, so a copy is inserted and the original
+    /// {@code input} is kept intact for the placed-amount calculation and the fallback to the network.
     @Override
     protected int transferStackToMenu(ItemStack input) {
         if (input.getItem() instanceof FantasyPatternItem) {
@@ -176,7 +164,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     // Actions
     // ------------------------------------------------------------------------
 
-    /** Encodes the current ingredients and results onto a blank fantasy pattern. Safe to call from either side. */
+    /// Encodes the current ingredients and results onto a blank fantasy pattern. Safe to call from either side.
     public void encode() {
         if (isClientSide()) {
             sendClientAction(ACTION_ENCODE);
@@ -211,7 +199,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         lastEncodedPattern = encodedPatternSlot.getItem().copy();
     }
 
-    /** Clears the ingredients and results. Safe to call from either side. */
+    /// Clears the ingredients and results. Safe to call from either side.
     public void clear() {
         if (isClientSide()) {
             sendClientAction(ACTION_CLEAR);
@@ -226,12 +214,10 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         }
     }
 
-    /**
-     * Replaces the ingredients and results wholesale, used by the recipe viewer integration. Server side only.
-     *
-     * The ingredients carry the tag they came from, which is what makes a bookshelf pattern ask for any plank rather
-     * than the particular one the recipe viewer happened to display.
-     */
+    /// Replaces the ingredients and results wholesale, used by the recipe viewer integration. Server side only.
+    ///
+    /// The ingredients carry the tag they came from, which is what makes a bookshelf pattern ask for any plank rather
+    /// than the particular one the recipe viewer happened to display.
     public void setEncodedRecipe(List<PatternIngredient> inputs, List<GenericStack> outputs) {
         for (int i = 0; i < inputSlots.length; i++) {
             PatternIngredient ingredient = i < inputs.size() ? inputs.get(i) : null;
@@ -253,7 +239,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     // Helpers
     // ------------------------------------------------------------------------
 
-    /** Loads an encoded pattern back into the ingredient and result slots, tags included. */
+    /// Loads an encoded pattern back into the ingredient and result slots, tags included.
     private void loadPattern(ItemStack stack) {
         FantasyPatternData data = FantasyPatternItem.getData(stack);
         if (data == null) {
@@ -262,7 +248,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         setEncodedRecipe(data.inputs(), data.outputs());
     }
 
-    /** The ingredients as encoded, each carrying the tag its slot was filled from (if it is still valid). */
+    /// The ingredients as encoded, each carrying the tag its slot was filled from (if it is still valid).
     private List<PatternIngredient> collectInputs() {
         List<PatternIngredient> ingredients = new ArrayList<>();
         for (int i = 0; i < inputSlots.length; i++) {
@@ -291,21 +277,19 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     // Slots
     // ------------------------------------------------------------------------
 
-    /**
-     * An ingredient slot: a preview only.
-     *
-     * The ingredients define what a fantasy pattern will request, and they carry a tag that the slot itself cannot
-     * represent, so letting the player edit them by hand would silently drop that tag. They are therefore filled only
-     * by transferring a recipe.
-     *
-     * Two methods are deliberately NOT overridden, because both are on the path the server uses to push slot contents
-     * to the client and blocking them leaves the slots empty on screen until the UI is reopened:
-     * <ul>
-     * <li>{@code set}, which {@code AbstractContainerMenu#setItem} calls when a slot update arrives, and</li>
-     * <li>{@code canSetFilterTo}, which {@code FakeSlot#set} checks before applying that update.</li>
-     * </ul>
-     * The player-facing routes are blocked in the menu instead - see {@link #doAction} and {@link #setFilter}.
-     */
+    /// An ingredient slot: a preview only.
+    ///
+    /// The ingredients define what a fantasy pattern will request, and they carry a tag that the slot itself cannot
+    /// represent, so letting the player edit them by hand would silently drop that tag. They are therefore filled only
+    /// by transferring a recipe.
+    ///
+    /// Two methods are deliberately NOT overridden, because both are on the path the server uses to push slot contents
+    /// to the client and blocking them leaves the slots empty on screen until the UI is reopened:
+    /// <ul>
+    /// <li>{@code set}, which {@code AbstractContainerMenu#setItem} calls when a slot update arrives, and</li>
+    /// <li>{@code canSetFilterTo}, which {@code FakeSlot#set} checks before applying that update.</li>
+    /// </ul>
+    /// The player-facing routes are blocked in the menu instead - see {@link #doAction} and {@link #setFilter}.
     private static class PreviewSlot extends FakeSlot {
 
         PreviewSlot(InternalInventory inv, int index) {
@@ -332,7 +316,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         }
     }
 
-    /** Takes unencoded fantasy patterns, which encoding consumes. */
+    /// Takes unencoded fantasy patterns, which encoding consumes.
     private static class BlankPatternSlot extends AppEngSlot {
         BlankPatternSlot(InternalInventory inv) {
             super(inv, FantasyEncodingTerminalPart.BLANK_PATTERN_SLOT);
@@ -345,10 +329,8 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         }
     }
 
-    /**
-     * Holds the encoded pattern. Encoded patterns may also be placed here by hand, which loads their contents back
-     * into the terminal so the recipe can be edited and written back.
-     */
+    /// Holds the encoded pattern. Encoded patterns may also be placed here by hand, which loads their contents back
+    /// into the terminal so the recipe can be edited and written back.
     private static class EncodedPatternSlot extends AppEngSlot {
 
         EncodedPatternSlot(InternalInventory inv) {

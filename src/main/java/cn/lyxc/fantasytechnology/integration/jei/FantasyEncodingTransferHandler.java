@@ -1,11 +1,12 @@
 package cn.lyxc.fantasytechnology.integration.jei;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
-import org.jetbrains.annotations.Nullable;
-
+import appeng.api.stacks.AEFluidKey;
+import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.GenericStack;
+import cn.lyxc.fantasytechnology.integration.mekanism.MekanismCompat;
+import cn.lyxc.fantasytechnology.item.FantasyPatternData;
+import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
+import cn.lyxc.fantasytechnology.network.TransferRecipePayload;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
 import mezz.jei.api.ingredients.ITypedIngredient;
@@ -22,25 +23,18 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.jetbrains.annotations.Nullable;
 
-import appeng.api.stacks.AEFluidKey;
-import appeng.api.stacks.AEItemKey;
-import appeng.api.stacks.GenericStack;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
-import cn.lyxc.fantasytechnology.item.FantasyPatternData;
-import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
-import cn.lyxc.fantasytechnology.network.TransferRecipePayload;
-
-/**
- * Transfers any recipe JEI can show into the fantasy encoding terminal, items and fluids alike.
- *
- * A fantasy pattern is a processing recipe - a bag of ingredients and a bag of results, with no notion of a grid or a
- * machine - so there is nothing category-specific to honour. Registering universally therefore makes smelting,
- * stonecutting, and modded categories work for free instead of only vanilla crafting.
- *
- * Both the recipe id and the displayed stacks are sent; see {@link TransferRecipePayload} for why the server needs
- * both. Fluids can only ever come from the display, since vanilla's recipe API cannot express them.
- */
+/// Transfers any recipe JEI can show into the fantasy encoding terminal, items and fluids alike.
+/// A fantasy pattern is a processing recipe - a bag of ingredients and a bag of results, with no notion of a grid or a
+/// machine - so there is nothing category-specific to honour. Registering universally therefore makes smelting,
+/// stonecutting, and modded categories work for free instead of only vanilla crafting.
+/// Both the recipe id and the displayed stacks are sent; see {@link TransferRecipePayload} for why the server needs
+/// both. Fluids can only ever come from the display, since vanilla's recipe API cannot express them.
 public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferHandler<FantasyEncodingTermMenu> {
 
     private final IRecipeTransferHandlerHelper helper;
@@ -84,10 +78,8 @@ public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferH
         return null;
     }
 
-    /**
-     * The stacks JEI is currently displaying for one role, as AE2 keys. Ingredient types other than items and fluids
-     * are skipped: a fantasy pattern has no way to represent them.
-     */
+    /// The stacks JEI is currently displaying for one role, as AE2 keys. Ingredient types other than items, fluids and
+    /// MEK chemicals are skipped: a fantasy pattern has no way to represent them.
     private static List<GenericStack> read(IRecipeSlotsView slots, RecipeIngredientRole role, int limit) {
         List<GenericStack> stacks = new ArrayList<>();
         for (IRecipeSlotView slotView : slots.getSlotViews(role)) {
@@ -115,6 +107,8 @@ public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferH
             return key == null ? null : new GenericStack(key, fluid.get().getAmount());
         }
 
-        return null;
+        // MEK chemicals are a JEI ingredient type of their own; the compat facade does the recognising, so
+        // mekanism's classes are never named here. It answers null for anything that is not a chemical.
+        return MekanismCompat.toGenericStack(ingredient.getIngredient());
     }
 }

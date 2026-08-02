@@ -1,9 +1,11 @@
 package cn.lyxc.fantasytechnology.network;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
+import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.GenericStack;
+import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.item.FantasyPatternData;
+import cn.lyxc.fantasytechnology.item.PatternIngredient;
+import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -16,31 +18,26 @@ import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-import appeng.api.stacks.AEItemKey;
-import appeng.api.stacks.GenericStack;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
-import cn.lyxc.fantasytechnology.FantasyTechnology;
-import cn.lyxc.fantasytechnology.item.FantasyPatternData;
-import cn.lyxc.fantasytechnology.item.PatternIngredient;
-import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
 
-/**
- * Client -> server: fills the fantasy encoding terminal from a recipe the player transferred out of a recipe viewer.
- *
- * Two things travel, because neither alone is sufficient:
- * <ul>
- * <li>The recipe id, whenever the viewer had a real registered recipe. The server re-reads it from its own recipe
- * manager, which is the only place the ingredients still carry their tags - the client's copy has them flattened into
- * plain item lists by {@code Ingredient.CONTENTS_STREAM_CODEC} during sync.</li>
- * <li>The ingredients and results as displayed, which is the only way fluids can be recovered at all: vanilla's
- * {@code Recipe#getIngredients} and {@code getResultItem} are item-only, so a recipe's liquid parts exist nowhere but
- * in what the viewer draws.</li>
- * </ul>
- *
- * The server therefore takes tagged item ingredients from the recipe and adds the displayed fluids on top; those two
- * sets cannot overlap, since a fluid can never appear in {@code getIngredients}. Results always come from the display,
- * which sees byproducts and fluid outputs that {@code getResultItem} does not.
- */
+/// Client -> server: fills the fantasy encoding terminal from a recipe the player transferred out of a recipe viewer.
+///
+/// Two things travel, because neither alone is sufficient:
+/// <ul>
+/// <li>The recipe id, whenever the viewer had a real registered recipe. The server re-reads it from its own recipe
+/// manager, which is the only place the ingredients still carry their tags - the client's copy has them flattened into
+/// plain item lists by {@code Ingredient.CONTENTS_STREAM_CODEC} during sync.</li>
+/// <li>The ingredients and results as displayed, which is the only way fluids can be recovered at all: vanilla's
+/// {@code Recipe#getIngredients} and {@code getResultItem} are item-only, so a recipe's liquid parts exist nowhere but
+/// in what the viewer draws.</li>
+/// </ul>
+///
+/// The server therefore takes tagged item ingredients from the recipe and adds the displayed fluids on top; those two
+/// sets cannot overlap, since a fluid can never appear in {@code getIngredients}. Results always come from the display,
+/// which sees byproducts and fluid outputs that {@code getResultItem} does not.
 public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<GenericStack> inputs,
         List<GenericStack> outputs) implements CustomPacketPayload {
 
@@ -95,9 +92,8 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<Ge
         });
     }
 
-    /**
-     * The recipe's ingredients as the server sees them, tags intact. Items only - see the class comment.
-     */
+
+    /// The recipe's ingredients as the server sees them, tags intact. Items only - see the class comment.
     private static List<PatternIngredient> resolveIngredients(Recipe<?> recipe) {
         List<PatternIngredient> ingredients = new ArrayList<>();
         if (recipe == null) {
@@ -115,12 +111,10 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<Ge
         return ingredients;
     }
 
-    /**
-     * Ingredients taken straight from what the viewer displayed, with no tags.
-     *
-     * @param fluidsOnly when true, only fluid entries are kept - used to top up a set of ingredients that the server
-     *                   already resolved from the recipe, which by definition contains no fluids.
-     */
+    /// Ingredients taken straight from what the viewer displayed, with no tags.
+    ///
+    /// @param fluidsOnly when true, only fluid entries are kept - used to top up a set of ingredients that the server
+    ///                   already resolved from the recipe, which by definition contains no fluids.
     private static List<PatternIngredient> displayedIngredients(List<GenericStack> stacks, int limit,
             boolean fluidsOnly) {
         List<PatternIngredient> ingredients = new ArrayList<>();
@@ -139,11 +133,9 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<Ge
         return ingredients;
     }
 
-    /**
-     * Turns one recipe ingredient into a pattern ingredient, keeping the tag when the ingredient is exactly one tag.
-     * Anything more complex (a hand-written item list, or a NeoForge custom ingredient) falls back to its first
-     * matching item, since a fantasy pattern can only express "this key" or "anything in this tag".
-     */
+    /// Turns one recipe ingredient into a pattern ingredient, keeping the tag when the ingredient is exactly one tag.
+    /// Anything more complex (a hand-written item list, or a NeoForge custom ingredient) falls back to its first
+    /// matching item, since a fantasy pattern can only express "this key" or "anything in this tag".
     private static PatternIngredient convert(Ingredient ingredient) {
         ItemStack[] items = ingredient.getItems();
         if (items.length == 0) {

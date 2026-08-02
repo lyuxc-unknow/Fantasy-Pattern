@@ -16,24 +16,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * The recipe stored in a fantasy pattern: a list of ingredients and a list of results, in the shape of an AE2
- * processing pattern rather than a crafting grid. Order and position carry no meaning, so empty entries are dropped on
- * construction and the lists are only bounded from above.
- *
- * Everything is expressed as {@link GenericStack}, so items and fluids are handled the same way throughout - a recipe
- * that consumes water and produces a liquid encodes exactly like one made of items.
- *
- * Ingredients may be tag-based (see {@link PatternIngredient}), in which case autocrafting will accept anything in the
- * tag instead of insisting on what the pattern happened to be encoded with.
- *
- * The pattern itself is the recipe - no live recipe lookup happens when it is used.
- */
+/// The recipe stored in a fantasy pattern: a list of ingredients and a list of results, in the shape of an AE2
+/// processing pattern rather than a crafting grid. Order and position carry no meaning, so empty entries are dropped on
+/// construction and the lists are only bounded from above.
+///
+/// Everything is expressed as {@link GenericStack}, so items and fluids are handled the same way throughout - a recipe
+/// that consumes water and produces a liquid encodes exactly like one made of items.
+///
+/// Ingredients may be tag-based (see {@link PatternIngredient}), in which case autocrafting will accept anything in the
+/// tag instead of insisting on what the pattern happened to be encoded with.
+///
+/// The pattern itself is the recipe - no live recipe lookup happens when it is used.
 public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericStack> outputs) {
 
-    /** How many ingredient entries a single pattern can hold. */
+    /// How many ingredient entries a single pattern can hold.
     public static final int MAX_INPUTS = 81;
-    /** How many result entries a single pattern can hold. */
+    /// How many result entries a single pattern can hold.
     public static final int MAX_OUTPUTS = 6;
 
     public static final Codec<FantasyPatternData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -61,10 +59,8 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
         }
     }
 
-    /**
-     * Aggregates the ingredients into required amounts. Entries that share a tag merge into one bulk request even if
-     * they were encoded from different keys, so six planks of three different woods become one "6x #planks".
-     */
+    /// Aggregates the ingredients into required amounts. Entries that share a tag merge into one bulk request even if
+    /// they were encoded from different keys, so six planks of three different woods become one "6x #planks".
     public Map<IngredientKey, Long> requiredIngredients() {
         Map<IngredientKey, Long> required = new LinkedHashMap<>();
         for (PatternIngredient ingredient : inputs) {
@@ -73,15 +69,13 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
         return required;
     }
 
-    /** @return true if there is at least one ingredient and at least one result. */
+    /// @return true if there is at least one ingredient and at least one result.
     public boolean isCraftable() {
         return !inputs.isEmpty() && !outputs.isEmpty();
     }
 
-    /**
-     * The identity of one aggregated ingredient: either a tag, or an exact key - never both. Built through
-     * {@link #of(PatternIngredient)} so that equality behaves accordingly.
-     */
+    /// The identity of one aggregated ingredient: either a tag, or an exact key - never both. Built through
+    /// {@link #of(PatternIngredient)} so that equality behaves accordingly.
     public record IngredientKey(@Nullable ResourceLocation tag, AEKey representative) {
 
         public static IngredientKey of(PatternIngredient ingredient) {
@@ -99,12 +93,12 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
             return tag != null ? PatternIngredient.isInTag(key, tag) : representative.equals(key);
         }
 
-        /** Every key that satisfies this ingredient, the representative first. */
+        /// Every key that satisfies this ingredient, the representative first.
         public List<AEKey> possibleKeys() {
             return new PatternIngredient(new GenericStack(representative, 1), Optional.ofNullable(tag)).possibleKeys();
         }
 
-        /** How this ingredient reads in a tooltip: the tag id when tagged, the key's name otherwise. */
+        /// How this ingredient reads in a tooltip: the tag id when tagged, the key's name otherwise.
         public Component displayName() {
             return tag != null ? Component.literal("#" + tag) : representative.getDisplayName();
         }

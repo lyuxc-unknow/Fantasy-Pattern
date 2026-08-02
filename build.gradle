@@ -92,6 +92,22 @@ repositories {
              includeGroup 'mezz.jei'
          }
     }
+    // Mekanism (its API is what we compile against)
+    maven {
+         name = 'ModMaven'
+         url = 'https://modmaven.dev/'
+         content {
+             includeGroup 'mekanism'
+         }
+    }
+    // CurseForge, for dev-run-only mods that publish nowhere else
+    maven {
+         name = 'CurseMaven'
+         url = 'https://cursemaven.com'
+         content {
+             includeGroup 'curse.maven'
+         }
+    }
 }
 
  dependencies {
@@ -99,6 +115,9 @@ repositories {
      compileOnly "maven.modrinth:ae2:${ae2_version}"
      // We add the full version to localRuntime, not runtimeOnly, so that we do not publish a dependency on it
      localRuntime "maven.modrinth:ae2:${ae2_version}"
+     // Applied Mekanistics bridges mekanism chemicals into AE2's key system; both it and mekanism are optional
+     compileOnly "maven.modrinth:applied-mekanistics:${applied_mekanistics_version}"
+     localRuntime "maven.modrinth:applied-mekanistics:${applied_mekanistics_version}"
      // GuideME is a required dependency of AE2 and must be present in dev runs
      localRuntime "org.appliedenergistics:guideme:${guideme_version}"
 
@@ -107,6 +126,16 @@ repositories {
      compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
      localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 
+     // Mekanism: compile against the API only, load the full mod and its modules in dev runs
+     compileOnly "mekanism:Mekanism:${mekanism_version}:api"
+     localRuntime "mekanism:Mekanism:${mekanism_version}" // Mekanism
+     localRuntime "mekanism:Mekanism:${mekanism_version}:additions" // Mekanism: Additions
+     localRuntime "mekanism:Mekanism:${mekanism_version}:generators" // Mekanism: Generators
+     localRuntime "mekanism:Mekanism:${mekanism_version}:tools" // Mekanism: Tools
+
+     // AE2 JEI Integration, dev runs only: makes AE2 recipes show up in JEI so recipe transfer can be tested.
+     // https://www.curseforge.com/minecraft/mc-mods/ae2-jei-integration
+     localRuntime "curse.maven:ae2-jei-integration-${ae2_jei_integration_project}:${ae2_jei_integration_file}"
  }
 
  var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

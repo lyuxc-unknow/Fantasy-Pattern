@@ -7,38 +7,52 @@ license="${mod_license}"
     file="META-INF/accesstransformer.cfg"
 
 [[mods]] #mandatory
-modId="${mod_id}" #mandatory
+modId="fantasy_technology" #mandatory
 version="${mod_version}" #mandatory
 displayName="${mod_name}" #mandatory
 description='''
 Fantasy Technology
 '''
 
-[[dependencies.${mod_id}]] #optional
+[[dependencies.fantasy_technology]] #optional
     modId="neoforge" #mandatory
     type="required" #mandatory
     versionRange="[${neo_version},)" #mandatory
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.${mod_id}]]
+[[dependencies.fantasy_technology]]
     modId="minecraft"
     type="required"
     versionRange="${minecraft_version_range}"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.${mod_id}]]
+[[dependencies.fantasy_technology]]
     modId="ae2"
     type="required"
     versionRange="[${ae2_version},)"
     ordering="AFTER"
     side="BOTH"
 
-[[dependencies.${mod_id}]]
+[[dependencies.fantasy_technology]]
     modId="jei"
     type="optional"
     versionRange="[19,)"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.fantasy_technology]]
+    modId="mekanism"
+    type="optional"
+    versionRange="[10.7,)"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.fantasy_technology]]
+    modId="appmek"
+    type="optional"
+    versionRange="[1.6,)"
     ordering="AFTER"
     side="BOTH"
 

@@ -20,9 +20,7 @@ import appeng.menu.locator.MenuLocators;
 import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
 import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
 
-/**
- * The fantasy annihilation block ("幻梦寂灭"). See {@link FantasyAnnihilationBlockEntity} for the crafting logic.
- */
+/// The fantasy annihilation block ("幻梦寂灭"). See {@link FantasyAnnihilationBlockEntity} for the crafting logic.
 public class FantasyAnnihilationBlock extends Block implements EntityBlock {
 
     public FantasyAnnihilationBlock(Properties properties) {

@@ -4,7 +4,7 @@ import appeng.api.inventories.InternalInventory;
 import appeng.api.parts.IPartItem;
 import appeng.api.parts.IPartModel;
 import appeng.api.stacks.AEKey;
-import appeng.api.stacks.AEKeyType;
+import appeng.api.stacks.AEKeyTypes;
 import appeng.parts.PartModel;
 import appeng.parts.reporting.AbstractTerminalPart;
 import appeng.util.ConfigInventory;
@@ -26,17 +26,15 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * The fantasy encoding terminal ("幻梦编码终端"), a cable part in the style of AE2's own pattern encoding terminal.
- *
- * Being a terminal part rather than a standalone block, it is attached to an ME network and its menu shows the
- * network's contents, so recipe ingredients can be dragged straight out of network storage into the crafting grid.
- */
+/// The fantasy encoding terminal ("幻梦编码终端"), a cable part in the style of AE2's own pattern encoding terminal.
+///
+/// Being a terminal part rather than a standalone block, it is attached to an ME network and its menu shows the
+/// network's contents, so recipe ingredients can be dragged straight out of network storage into the crafting grid.
 public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements IFantasyEncodingTerminalHost {
 
-    /** Ingredient slots, laid out as 3 columns the UI scrolls through. */
+    /// Ingredient slots, laid out as 3 columns the UI scrolls through.
     public static final int INPUT_SLOTS = FantasyPatternData.MAX_INPUTS;
-    /** Result slots, shown as a fixed 3x3 block. */
+    /// Result slots, shown as a fixed 3x3 block.
     public static final int OUTPUT_SLOTS = FantasyPatternData.MAX_OUTPUTS;
 
     public static final int BLANK_PATTERN_SLOT = 0;
@@ -47,42 +45,39 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
     public static final ResourceLocation MODEL_ON = ResourceLocation
             .fromNamespaceAndPath(FantasyTechnology.MODID, "part/fantasy_encoding_terminal_on");
 
-    // MODEL_BASE and the status overlays are AE2's shared display-part models, inherited from AbstractDisplayPart.
+    /// MODEL_BASE and the status overlays are AE2's shared display-part models, inherited from AbstractDisplayPart.
     public static final IPartModel MODELS_OFF = new PartModel(MODEL_BASE, MODEL_OFF, MODEL_STATUS_OFF);
     public static final IPartModel MODELS_ON = new PartModel(MODEL_BASE, MODEL_ON, MODEL_STATUS_ON);
     public static final IPartModel MODELS_HAS_CHANNEL = new PartModel(MODEL_BASE, MODEL_ON, MODEL_STATUS_HAS_CHANNEL);
 
-    /** All models this part can display; handed to AE2 during client setup. */
+    /// All models this part can display; handed to AE2 during client setup.
     public static List<ResourceLocation> getModels() {
         return List.of(MODEL_OFF, MODEL_ON);
     }
 
-    /**
-     * The ingredients being encoded. Config inventories (rather than real ones) so entries can be dropped in from the
-     * ME network view without consuming anything, and so each entry carries an amount. Fluids are accepted alongside
-     * items, which is what lets a recipe with a liquid ingredient be encoded at all.
-     */
+    /// The ingredients being encoded. Config inventories (rather than real ones) so entries can be dropped in from the
+    /// ME network view without consuming anything, and so each entry carries an amount. Every registered AE2 key type
+    /// is accepted - items and fluids natively, MEK chemicals through applied-mekanistics' {@code appmek:chemical}
+    /// type - which is what lets a recipe with a liquid or chemical ingredient be encoded at all.
     private final ConfigInventory encodedInputs = ConfigInventory.configStacks(INPUT_SLOTS)
-            .supportedTypes(AEKeyType.items(), AEKeyType.fluids())
+            .supportedTypes(AEKeyTypes.getAll())
             .changeListener(this::saveChanges)
             .build();
 
     private final ConfigInventory encodedOutputs = ConfigInventory.configStacks(OUTPUT_SLOTS)
-            .supportedTypes(AEKeyType.items(), AEKeyType.fluids())
+            .supportedTypes(AEKeyTypes.getAll())
             .changeListener(this::saveChanges)
             .build();
 
-    /** Slot 0 takes blank fantasy patterns, slot 1 holds the encoded one - and decodes it back for editing. */
+    /// Slot 0 takes blank fantasy patterns, slot 1 holds the encoded one - and decodes it back for editing.
     private final AppEngInternalInventory patternInv = new AppEngInternalInventory(this, 2, 64,
             new PatternSlotFilter());
 
-    /**
-     * The tag each ingredient slot was filled from, or null where the ingredient is an exact key.
-     *
-     * A config inventory can only hold a key plus an amount, so the tag has to live beside it. Entries are never
-     * cleared explicitly: {@link #getInputTag(int)} discards a tag that no longer covers the slot's current contents,
-     * so replacing a tagged ingredient by hand automatically turns it back into an exact one.
-     */
+    /// The tag each ingredient slot was filled from, or null where the ingredient is an exact key.
+    ///
+    /// A config inventory can only hold a key plus an amount, so the tag has to live beside it. Entries are never
+    /// cleared explicitly: {@link #getInputTag(int)} discards a tag that no longer covers the slot's current contents,
+    /// so replacing a tagged ingredient by hand automatically turns it back into an exact one.
     private final ResourceLocation[] inputTags = new ResourceLocation[INPUT_SLOTS];
 
     public FantasyEncodingTerminalPart(IPartItem<?> partItem) {
@@ -188,19 +183,15 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
         }
     }
 
-    /**
-     * The blank pattern slot only takes unencoded fantasy patterns; the encoded slot only takes encoded ones, which
-     * the menu then decodes back into the grid so the recipe can be edited.
-     */
+    /// The blank pattern slot only takes unencoded fantasy patterns; the encoded slot only takes encoded ones, which
+    /// the menu then decodes back into the grid so the recipe can be edited.
     private static class PatternSlotFilter implements IAEItemFilter {
         @Override
         public boolean allowInsert(InternalInventory inv, int slot, ItemStack stack) {
             if (!(stack.getItem() instanceof FantasyPatternItem)) {
                 return false;
             }
-            return slot == BLANK_PATTERN_SLOT
-                    ? !FantasyPatternItem.isEncoded(stack)
-                    : FantasyPatternItem.isEncoded(stack);
+            return (slot == BLANK_PATTERN_SLOT) != FantasyPatternItem.isEncoded(stack);
         }
 
         @Override

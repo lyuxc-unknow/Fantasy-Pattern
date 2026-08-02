@@ -21,7 +21,7 @@ public final class FTBlockEntities {
                             .of(FantasyAnnihilationBlockEntity::new, FTBlocks.FANTASY_ANNIHILATION.get())
                             .build(null));
 
-    /** Forces class loading so the static registrations above run. */
+    /// Forces class loading so the static registrations above run.
     public static void init() {
     }
 }

@@ -1,12 +1,9 @@
 package cn.lyxc.fantasytechnology.item;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
+import appeng.api.stacks.*;
+import cn.lyxc.fantasytechnology.integration.mekanism.MekanismCompat;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -17,22 +14,19 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 
-import appeng.api.stacks.AEFluidKey;
-import appeng.api.stacks.AEItemKey;
-import appeng.api.stacks.AEKey;
-import appeng.api.stacks.GenericStack;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
-/**
- * One ingredient of a fantasy pattern, for items and fluids alike.
- *
- * When {@link #tag()} is present the ingredient is satisfied by anything in that tag, and {@link #stack()} is only the
- * representative shown in the UI; otherwise the exact key of {@code stack} is required. The tag is stored as a bare id
- * because item and fluid tags live in different registries - which one to look in is decided by the representative's
- * key type.
- *
- * Tags come from the recipe a pattern was filled from, so encoding a bookshelf recipe stores {@code #minecraft:planks}
- * rather than the particular plank the recipe viewer happened to display.
- */
+/// One ingredient of a fantasy pattern - an item, a fluid, or any other AE2 key type such as a MEK chemical.
+///
+/// When {@link #tag()} is present the ingredient is satisfied by anything in that tag, and {@link #stack()} is only the
+/// representative shown in the UI; otherwise the exact key of {@code stack} is required. The tag is stored as a bare id
+/// because each key type's tags live in a different registry - which one to look in is decided by the representative's
+/// key type.
+///
+/// Tags come from the recipe a pattern was filled from, so encoding a bookshelf recipe stores {@code #minecraft:planks}
+/// rather than the particular plank the recipe viewer happened to display.
 public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> tag) {
 
     public static final Codec<PatternIngredient> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -47,12 +41,12 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
             PatternIngredient::tag,
             PatternIngredient::new);
 
-    /** An ingredient that requires this exact key. */
+    /// An ingredient that requires this exact key.
     public static PatternIngredient of(GenericStack stack) {
         return new PatternIngredient(stack, Optional.empty());
     }
 
-    /** An ingredient that accepts anything in {@code tag}, displayed as {@code representative}. */
+    /// An ingredient that accepts anything in {@code tag}, displayed as {@code representative}.
     public static PatternIngredient of(GenericStack representative, ResourceLocation tag) {
         return new PatternIngredient(representative, Optional.of(tag));
     }
@@ -69,10 +63,13 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
         return stack.amount() <= 0;
     }
 
-    /**
-     * Whether a key belongs to a tag, resolved in whichever registry matches the key's type. A bare tag id is
-     * ambiguous on its own - {@code c:tanks} could name both an item and a fluid tag - so the key decides.
-     */
+    /// Whether a key belongs to a tag, resolved in whichever registry matches the key's type. A bare tag id is
+    /// ambiguous on its own - {@code c:tanks} could name both an item and a fluid tag - so the key decides.
+    ///
+    /// Other key types (MEK chemicals via applied-mekanistics, for instance) are handled without naming them: any one
+    /// tag name their key type already reports identifies the registry such a tag would live in, which is all that is
+    /// needed to build the {@link TagKey} and ask the key itself. Key types reporting no tags at all - the default
+    /// for {@code AEKeyType} - therefore never match.
     public static boolean isInTag(AEKey key, ResourceLocation tagId) {
         if (key instanceof AEItemKey itemKey) {
             return itemKey.getItem().builtInRegistryHolder().is(TagKey.create(Registries.ITEM, tagId));
@@ -80,13 +77,15 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
         if (key instanceof AEFluidKey fluidKey) {
             return fluidKey.getFluid().builtInRegistryHolder().is(TagKey.create(Registries.FLUID, tagId));
         }
-        return false;
+        // findAny() short-circuits on the first tag name, which keeps this constant time: it runs for every
+        // candidate key the crafting planner considers.
+        return key.getType().getTagNames().findAny()
+                .map(known -> key.isTagged(TagKey.create(known.registry(), tagId)))
+                .orElse(false);
     }
 
-    /**
-     * Every key that satisfies this ingredient, the representative first so it stays the preferred choice when the
-     * network holds several of them.
-     */
+    /// Every key that satisfies this ingredient, the representative first so it stays the preferred choice when the
+    /// network holds several of them.
     public List<AEKey> possibleKeys() {
         if (tag.isEmpty()) {
             return List.of(stack.what());
@@ -101,6 +100,10 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
         return keys;
     }
 
+    /// Everything in the tag, for the registries this mod knows how to walk. Unlike {@link #isInTag}, enumerating a
+    /// tag needs the registry object itself, which {@code AEKeyType} does not expose - so a key that is neither an
+    /// item, a fluid nor a MEK chemical contributes no substitutes and the ingredient falls back to its
+    /// representative alone.
     private static List<AEKey> keysInTag(AEKey representative, ResourceLocation tagId) {
         List<AEKey> keys = new ArrayList<>();
         if (representative instanceof AEItemKey) {
@@ -119,11 +122,15 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
                     keys.add(key);
                 }
             }
+        } else {
+            // Chemicals live in mekanism's own registry, reachable only through the compat facade - which returns
+            // nothing when the bridging mods are absent or the key is not a chemical.
+            keys.addAll(MekanismCompat.chemicalKeysInTag(representative, tagId));
         }
         return keys;
     }
 
-    /** How this ingredient reads in a tooltip: the tag id when tagged, the key's name otherwise. */
+    /// How this ingredient reads in a tooltip: the tag id when tagged, the key's name otherwise.
     public Component displayName() {
         return tag.<Component>map(id -> Component.literal("#" + id))
                 .orElseGet(() -> stack.what().getDisplayName());

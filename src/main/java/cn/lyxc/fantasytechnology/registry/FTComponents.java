@@ -22,7 +22,7 @@ public final class FTComponents {
                             .networkSynchronized(FantasyPatternData.STREAM_CODEC)
                             .build());
 
-    /** Forces class loading so the static registrations above run. */
+    /// Forces class loading so the static registrations above run.
     public static void init() {
     }
 }

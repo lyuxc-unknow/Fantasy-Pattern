@@ -11,10 +11,8 @@ import appeng.api.stacks.AEItemKey;
 
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 
-/**
- * Decoder that lets AE2 reconstruct {@link FantasyCraftingPattern} from fantasy pattern item stacks. Required so
- * crafting CPUs can persist and resume jobs across world reloads.
- */
+/// Decoder that lets AE2 reconstruct {@link FantasyCraftingPattern} from fantasy pattern item stacks. Required so
+/// crafting CPUs can persist and resume jobs across world reloads.
 public class FantasyPatternDecoder implements IPatternDetailsDecoder {
 
     public static final FantasyPatternDecoder INSTANCE = new FantasyPatternDecoder();

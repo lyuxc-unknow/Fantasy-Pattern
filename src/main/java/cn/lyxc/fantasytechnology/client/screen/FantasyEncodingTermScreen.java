@@ -2,7 +2,6 @@ package cn.lyxc.fantasytechnology.client.screen;
 
 import appeng.api.client.AEKeyRendering;
 import appeng.api.config.ActionItems;
-import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEKey;
 import appeng.client.Point;
 import appeng.client.gui.me.common.MEStorageScreen;
@@ -23,24 +22,22 @@ import net.minecraft.world.item.ItemStack;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Screen of the fantasy encoding terminal.
- *
- * Everything visual - the ME network item list, the panel background, and where every slot sits - comes from AE2:
- * {@link MEStorageScreen} plus the style document loaded from
- * {@code assets/ae2/screens/terminals/fantasy_encoding_terminal.json}.
- *
- * The one thing that cannot be expressed in the style document is the scrolling ingredient list: the menu registers
- * all 81 ingredient slots, but only a 3x3 window of them is visible at a time, so every frame this screen re-applies
- * the base positions and then shifts and enables just the rows the scrollbar is currently over. That is the same
- * approach AE2 uses for its own processing patterns.
- */
+/// Screen of the fantasy encoding terminal.
+///
+/// Everything visual - the ME network item list, the panel background, and where every slot sits - comes from AE2:
+/// {@link MEStorageScreen} plus the style document loaded from
+/// {@code assets/ae2/screens/terminals/fantasy_encoding_terminal.json}.
+///
+/// The one thing that cannot be expressed in the style document is the scrolling ingredient list: the menu registers
+/// all 81 ingredient slots, but only a 3x3 window of them is visible at a time, so every frame this screen re-applies
+/// the base positions and then shifts and enables just the rows the scrollbar is currently over. That is the same
+/// approach AE2 uses for its own processing patterns.
 public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTermMenu> {
 
-    /** Path passed to AE2's StyleManager; resolved against the ae2 namespace, hence the file's location. */
+    /// Path passed to AE2's StyleManager; resolved against the ae2 namespace, hence the file's location.
     public static final String STYLE = "/screens/terminals/fantasy_encoding_terminal.json";
 
-    /** Ingredient columns, and how many rows of them fit in the panel. */
+    /// Ingredient columns, and how many rows of them fit in the panel.
     private static final int INPUT_COLUMNS = 3;
     private static final int VISIBLE_ROWS = 3;
     private static final int SLOT_HEIGHT = 18;
@@ -64,11 +61,9 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
         inputScrollbar.setCaptureMouseWheel(false);
     }
 
-    /**
-     * The ME network list's scrollbar asks for every mouse wheel event on the screen, which would leave the
-     * ingredient list below with no way to scroll at all. Hand the wheel to the ingredient list while the cursor is
-     * over it, and let everything else fall through to AE2's default handling.
-     */
+    /// The ME network list's scrollbar asks for every mouse wheel event on the screen, which would leave the
+    /// ingredient list below with no way to scroll at all. Hand the wheel to the ingredient list while the cursor is
+    /// over it, and let everything else fall through to AE2's default handling.
     @Override
     public boolean mouseScrolled(double x, double y, double deltaX, double deltaY) {
         if (deltaY != 0 && isOverIngredients(x, y)) {
@@ -78,13 +73,11 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
         return super.mouseScrolled(x, y, deltaX, deltaY);
     }
 
-    /**
-     * Whether the cursor is over the ingredient area - the visible slot window or the scrollbar next to it.
-     *
-     * The hit test has to happen here: {@link Scrollbar#onMouseWheel} ignores the point it is handed and scrolls
-     * unconditionally, because AE2 normally does the hit testing one level up in the widget container, which this
-     * override bypasses.
-     */
+    /// Whether the cursor is over the ingredient area - the visible slot window or the scrollbar next to it.
+    ///
+    /// The hit test has to happen here: {@link Scrollbar#onMouseWheel} ignores the point it is handed and scrolls
+    /// unconditionally, because AE2 normally does the hit testing one level up in the widget container, which this
+    /// override bypasses.
     private boolean isOverIngredients(double x, double y) {
         Rect2i scrollbar = inputScrollbar.getBounds();
         if (scrollbar.contains((int) x - leftPos, (int) y - topPos)) {
@@ -98,16 +91,15 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
         return false;
     }
 
-    /**
-     * Fluid entries in the ingredient and result ghost slots are stored as {@link WrappedGenericStack}, whose vanilla
-     * tooltip is just the wrapper item's name - no fluid, no amount. Replace it with the fluid's own tooltip plus a
-     * formatted amount line, matching what the ME network view shows for fluids. Item entries pass through unchanged.
-     */
+    /// Fluid and chemical entries in the ingredient and result ghost slots are stored as {@link WrappedGenericStack},
+    /// whose vanilla tooltip is just the wrapper item's name - no fluid, no amount. Replace it with the key's own
+    /// tooltip plus a formatted amount line, matching what the ME network view shows. Item entries pass through
+    /// unchanged.
     @Override
     protected List<Component> getTooltipFromContainerItem(ItemStack stack) {
         if (stack.getItem() instanceof WrappedGenericStack wrapped) {
             AEKey what = wrapped.unwrapWhat(stack);
-            if (what instanceof AEFluidKey) {
+            if (what != null) {
                 List<Component> tooltip = new ArrayList<>(AEKeyRendering.getTooltip(what));
                 tooltip.add(Tooltips.getAmountTooltip(ButtonToolTips.StoredAmount, what,
                         wrapped.unwrapAmount(stack)));

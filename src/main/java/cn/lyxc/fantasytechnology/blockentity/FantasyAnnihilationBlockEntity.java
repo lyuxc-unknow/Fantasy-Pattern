@@ -1,20 +1,5 @@
 package cn.lyxc.fantasytechnology.blockentity;
 
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-
-import org.jetbrains.annotations.Nullable;
-
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraft.world.level.block.state.BlockState;
-
 import appeng.api.config.Actionable;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.implementations.blockentities.PatternContainerGroup;
@@ -34,21 +19,31 @@ import appeng.blockentity.grid.AENetworkedInvBlockEntity;
 import appeng.helpers.patternprovider.PatternContainer;
 import appeng.util.inv.AppEngInternalInventory;
 import appeng.util.inv.filter.IAEItemFilter;
-
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.registry.FTBlockEntities;
 import cn.lyxc.fantasytechnology.registry.FTBlocks;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
 
-/**
- * The fantasy annihilation block ("幻梦寂灭"). An ME autocrafting device holding fantasy patterns:
- *
- * The patterns installed here are registered with the network's crafting service (so they show up in terminals and
- * the pattern access terminal). When a crafting CPU executes one of them, the block consumes the ingredients and
- * inserts the result into the network instantly - no intermediate process, and it never reports busy, so a single
- * block executes as many crafting operations per tick as the CPU requests.
- */
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/// The fantasy annihilation block ("幻梦寂灭"). An ME autocrafting device holding fantasy patterns:
+///
+/// The patterns installed here are registered with the network's crafting service (so they show up in terminals and
+/// the pattern access terminal). When a crafting CPU executes one of them, the block consumes the ingredients and
+/// inserts the result into the network instantly - no intermediate process, and it never reports busy, so a single
+/// block executes as many crafting operations per tick as the CPU requests.
 public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         implements ICraftingProvider, PatternContainer, IGridTickable {
 
@@ -59,12 +54,10 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     private final AppEngInternalInventory patternInv = new AppEngInternalInventory(this, PATTERN_SLOTS, 1);
 
-    /**
-     * Results that have been crafted but not yet handed to the network.
-     *
-     * They cannot be inserted from inside {@code pushPattern}, because the crafting CPU only registers what it is
-     * waiting for after that call returns; see the comment there. Draining happens on the next grid tick.
-     */
+    /// Results that have been crafted but not yet handed to the network.
+    ///
+    /// They cannot be inserted from inside {@code pushPattern}, because the crafting CPU only registers what it is
+    /// waiting for after that call returns; see the comment there. Draining happens on the next grid tick.
     private final KeyCounter pendingOutputs = new KeyCounter();
 
     @Nullable
@@ -163,10 +156,8 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         return true;
     }
 
-    /**
-     * Pushes queued results into the network. Runs on the tick after the craft was pushed, by which point the
-     * crafting CPU is waiting for them and will claim them as completed operations.
-     */
+    /// Pushes queued results into the network. Runs on the tick after the craft was pushed, by which point the
+    /// crafting CPU is waiting for them and will claim them as completed operations.
     private void flushPendingOutputs() {
         IGrid grid = getMainNode().getGrid();
         if (grid == null || pendingOutputs.isEmpty()) {
@@ -274,17 +265,13 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     // Multiblock (reserved)
     // ------------------------------------------------------------------------
 
-    /**
-     * Whether the surrounding multiblock structure is complete. Reserved for a future multiblock layout - for now the
-     * structure is always considered formed, so the block works standalone exactly like before.
-     */
+    /// Whether the surrounding multiblock structure is complete. Reserved for a future multiblock layout - for now the
+    /// structure is always considered formed, so the block works standalone exactly like before.
     public boolean isStructureFormed() {
         return true;
     }
 
-    /**
-     * Only fantasy patterns may be placed into pattern slots.
-     */
+    /// Only fantasy patterns may be placed into pattern slots.
     private static class PatternSlotFilter implements IAEItemFilter {
         @Override
         public boolean allowInsert(InternalInventory inv, int slot, net.minecraft.world.item.ItemStack stack) {

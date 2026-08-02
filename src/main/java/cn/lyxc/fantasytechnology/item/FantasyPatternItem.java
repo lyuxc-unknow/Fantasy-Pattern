@@ -1,26 +1,22 @@
 package cn.lyxc.fantasytechnology.item;
 
-import java.util.List;
-import java.util.Map;
-
-import org.jetbrains.annotations.Nullable;
-
+import appeng.api.stacks.AEFluidKey;
+import appeng.api.stacks.GenericStack;
+import cn.lyxc.fantasytechnology.registry.FTComponents;
+import cn.lyxc.fantasytechnology.registry.FTItems;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
+import org.jetbrains.annotations.Nullable;
 
-import appeng.api.stacks.AEFluidKey;
-import appeng.api.stacks.GenericStack;
+import java.util.List;
+import java.util.Map;
 
-import cn.lyxc.fantasytechnology.registry.FTComponents;
-import cn.lyxc.fantasytechnology.registry.FTItems;
 
-/**
- * The fantasy pattern ("幻梦样板"). A single item that can be empty (unencoded) or encoded with a processing recipe
- * stored in its {@link FTComponents#FANTASY_PATTERN_DATA} component.
- */
+/// The fantasy pattern ("幻梦样板"). A single item that can be empty (unencoded) or encoded with a processing recipe
+/// stored in its {@link FTComponents#FANTASY_PATTERN_DATA} component.
 public class FantasyPatternItem extends Item {
 
     public FantasyPatternItem(Properties properties) {
@@ -39,9 +35,7 @@ public class FantasyPatternItem extends Item {
         return getData(stack) != null;
     }
 
-    /**
-     * Creates an encoded fantasy pattern from a set of ingredients and results.
-     */
+    /// Creates an encoded fantasy pattern from a set of ingredients and results.
     public static ItemStack encode(List<PatternIngredient> inputs, List<GenericStack> outputs) {
         ItemStack pattern = new ItemStack(FTItems.FANTASY_PATTERN.get());
         pattern.set(FTComponents.FANTASY_PATTERN_DATA, new FantasyPatternData(inputs, outputs));
@@ -85,9 +79,10 @@ public class FantasyPatternItem extends Item {
         return formatAmount(stack.what(), stack.amount());
     }
 
-    /** Fluids are counted in millibuckets internally; showing raw numbers there would be unreadable. */
+    /// Fluids and chemicals are counted in millibuckets internally; showing raw numbers there would be unreadable.
     private static String formatAmount(appeng.api.stacks.AEKey key, long amount) {
-        if (key instanceof AEFluidKey) {
+        // Both fluids and applied-mekanistics chemicals report 1 bucket per unit, so a single check covers them.
+        if (key.getType().getAmountPerUnit() == AEFluidKey.AMOUNT_BUCKET) {
             if (amount % AEFluidKey.AMOUNT_BUCKET == 0) {
                 return (amount / AEFluidKey.AMOUNT_BUCKET) + "B";
             }
