@@ -49,8 +49,9 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     private static final String ACTION_CLEAR = "clear";
     private static final String ACTION_DOUBLE = "double";
 
-    /// Ceiling for {@link #doubleAmounts()}. Far past anything a real recipe asks for, and low enough that doubling
-    /// it once more still fits comfortably in a long.
+    /// Ceiling for {@link #doubleAmounts()}. A click that would push any single ingredient or result past this is
+    /// cancelled wholesale, so all entries always stay on the same multiple of the original amounts. The ceiling
+    /// sits at the int range, matching the amount range the terminal's slots display and interact with.
     private static final long MAX_AMOUNT = Integer.MAX_VALUE;
 
     private final IFantasyEncodingTerminalHost terminalHost;
@@ -228,26 +229,40 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             sendClientAction(ACTION_DOUBLE);
             return;
         }
+        // All-or-nothing: if doubling any single entry would exceed the ceiling, the whole doubling is cancelled
+        // so entries never end up with inconsistent multiples.
+        if (wouldOverflow()) {
+            return;
+        }
         for (int i = 0; i < inputSlots.length; i++) {
             GenericStack stack = encodedInputs.getStack(i);
             if (stack != null && stack.amount() > 0) {
-                encodedInputs.setStack(i, doubled(stack));
+                encodedInputs.setStack(i, new GenericStack(stack.what(), stack.amount() * 2));
             }
         }
         for (int i = 0; i < outputSlots.length; i++) {
             GenericStack stack = encodedOutputs.getStack(i);
             if (stack != null && stack.amount() > 0) {
-                encodedOutputs.setStack(i, doubled(stack));
+                encodedOutputs.setStack(i, new GenericStack(stack.what(), stack.amount() * 2));
             }
         }
     }
 
-    /// The same stack with twice the amount, saturating at {@link #MAX_AMOUNT}. There is no button that halves the
-    /// amounts again, so without the ceiling a few too many clicks would run a long past its own range and leave a
-    /// negative amount behind, which no later click could undo.
-    private static GenericStack doubled(GenericStack stack) {
-        long amount = stack.amount() >= MAX_AMOUNT / 2 ? MAX_AMOUNT : stack.amount() * 2;
-        return new GenericStack(stack.what(), amount);
+    /// Whether doubling would push any single ingredient or result past {@link #MAX_AMOUNT}.
+    private boolean wouldOverflow() {
+        for (int i = 0; i < inputSlots.length; i++) {
+            GenericStack stack = encodedInputs.getStack(i);
+            if (stack != null && stack.amount() > MAX_AMOUNT / 2) {
+                return true;
+            }
+        }
+        for (int i = 0; i < outputSlots.length; i++) {
+            GenericStack stack = encodedOutputs.getStack(i);
+            if (stack != null && stack.amount() > MAX_AMOUNT / 2) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// Replaces the ingredients and results wholesale, used by the recipe viewer integration. Server side only.

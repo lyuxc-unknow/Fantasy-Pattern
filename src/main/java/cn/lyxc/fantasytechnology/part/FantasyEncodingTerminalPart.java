@@ -61,11 +61,16 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
     /// type - which is what lets a recipe with a liquid or chemical ingredient be encoded at all.
     private final ConfigInventory encodedInputs = ConfigInventory.configStacks(INPUT_SLOTS)
             .supportedTypes(AEKeyTypes.getAll())
+            // Like AE2's own pattern terminal, items may exceed their stack size so recipes with more than a
+            // stack of an item (and the double-amounts button) work; without this the amount would be clamped to 64.
+            .allowOverstacking(true)
             .changeListener(this::saveChanges)
             .build();
 
     private final ConfigInventory encodedOutputs = ConfigInventory.configStacks(OUTPUT_SLOTS)
             .supportedTypes(AEKeyTypes.getAll())
+            // Same overstacking allowance as the inputs, so results are not clamped to one stack size either.
+            .allowOverstacking(true)
             .changeListener(this::saveChanges)
             .build();
 
