@@ -3,6 +3,7 @@ package cn.lyxc.fantasytechnology.integration.jei;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.registration.IRecipeTransferRegistration;
+import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.resources.ResourceLocation;
 
 import cn.lyxc.fantasytechnology.FantasyTechnology;
@@ -12,6 +13,7 @@ import cn.lyxc.fantasytechnology.FantasyTechnology;
 /// The handler is registered universally rather than for a single recipe type, because a fantasy pattern is just a set
 /// of ingredients and results - smelting, stonecutting and modded categories transfer as sensibly as crafting does.
 @JeiPlugin
+@MethodsReturnNonnullByDefault
 public class FantasyJeiPlugin implements IModPlugin {
 
     private static final ResourceLocation UID = ResourceLocation.fromNamespaceAndPath(FantasyTechnology.MODID,

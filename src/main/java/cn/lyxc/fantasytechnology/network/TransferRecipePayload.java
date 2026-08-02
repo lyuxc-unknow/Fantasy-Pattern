@@ -6,12 +6,15 @@ import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
+import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
@@ -38,6 +41,7 @@ import java.util.Optional;
 /// The server therefore takes tagged item ingredients from the recipe and adds the displayed fluids on top; those two
 /// sets cannot overlap, since a fluid can never appear in {@code getIngredients}. Results always come from the display,
 /// which sees byproducts and fluid outputs that {@code getResultItem} does not.
+@MethodsReturnNonnullByDefault
 public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<GenericStack> inputs,
         List<GenericStack> outputs) implements CustomPacketPayload {
 
@@ -156,8 +160,10 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<Ge
             return null;
         }
         Ingredient.Value[] values = ingredient.getValues();
-        if (values.length == 1 && values[0] instanceof Ingredient.TagValue tagValue) {
-            return tagValue.tag().location();
+        if (values.length == 1 && values[0] instanceof Ingredient.TagValue(
+                TagKey<Item> tag
+        )) {
+            return tag.location();
         }
         return null;
     }

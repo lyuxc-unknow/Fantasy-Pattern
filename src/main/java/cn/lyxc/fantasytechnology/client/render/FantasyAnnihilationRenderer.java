@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
@@ -14,12 +15,16 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 
+import javax.annotation.ParametersAreNonnullByDefault;
+
 
 /// World renderer for the fantasy annihilation block while the multiblock is formed: six rainbow square frames, one
 /// floating outside each face of the block, like opened panels of a cut-open cube. Each frame lies parallel to its
 /// face and spins around the face normal, with every other frame spinning in the opposite direction (clockwise /
 /// counter-clockwise). Only the square outlines are drawn - thin rectangles lying in the frame's plane, so no interior
 /// fill or ghosting is ever visible - and all frames cycle through the rainbow together.
+@ParametersAreNonnullByDefault
+@MethodsReturnNonnullByDefault
 public class FantasyAnnihilationRenderer implements BlockEntityRenderer<FantasyAnnihilationBlockEntity> {
 
     /// The eight rainbow colors, cycled through together.

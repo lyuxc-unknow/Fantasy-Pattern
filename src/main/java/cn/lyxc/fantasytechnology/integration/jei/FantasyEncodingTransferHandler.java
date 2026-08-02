@@ -15,6 +15,7 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.transfer.IRecipeTransferError;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandlerHelper;
 import mezz.jei.api.recipe.transfer.IUniversalRecipeTransferHandler;
+import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
@@ -25,6 +26,7 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
+import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +37,8 @@ import java.util.Optional;
 /// stonecutting, and modded categories work for free instead of only vanilla crafting.
 /// Both the recipe id and the displayed stacks are sent; see {@link TransferRecipePayload} for why the server needs
 /// both. Fluids can only ever come from the display, since vanilla's recipe API cannot express them.
+@MethodsReturnNonnullByDefault
+@ParametersAreNonnullByDefault
 public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferHandler<FantasyEncodingTermMenu> {
 
     private final IRecipeTransferHandlerHelper helper;

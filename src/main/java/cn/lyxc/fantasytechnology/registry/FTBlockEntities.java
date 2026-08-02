@@ -1,5 +1,6 @@
 package cn.lyxc.fantasytechnology.registry;
 
+import com.mojang.datafixers.DSL;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -19,7 +20,7 @@ public final class FTBlockEntities {
             .register("fantasy_annihilation",
                     () -> BlockEntityType.Builder
                             .of(FantasyAnnihilationBlockEntity::new, FTBlocks.FANTASY_ANNIHILATION.get())
-                            .build(null));
+                            .build(DSL.emptyPartType()));
 
     /// Forces class loading so the static registrations above run.
     public static void init() {

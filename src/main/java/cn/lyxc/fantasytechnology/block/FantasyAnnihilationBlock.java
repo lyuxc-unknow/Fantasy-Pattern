@@ -1,7 +1,10 @@
 package cn.lyxc.fantasytechnology.block;
 
-import org.jetbrains.annotations.Nullable;
-
+import appeng.menu.MenuOpener;
+import appeng.menu.locator.MenuLocators;
+import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
+import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
+import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
@@ -13,14 +16,13 @@ import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import org.jetbrains.annotations.Nullable;
 
-import appeng.menu.MenuOpener;
-import appeng.menu.locator.MenuLocators;
-
-import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
-import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
+import javax.annotation.ParametersAreNonnullByDefault;
 
 /// The fantasy annihilation block ("幻梦寂灭"). See {@link FantasyAnnihilationBlockEntity} for the crafting logic.
+@ParametersAreNonnullByDefault
+@MethodsReturnNonnullByDefault
 public class FantasyAnnihilationBlock extends Block implements EntityBlock {
 
     public FantasyAnnihilationBlock(Properties properties) {

@@ -11,12 +11,14 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import org.jetbrains.annotations.Nullable;
 
+import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.List;
 import java.util.Map;
 
 
 /// The fantasy pattern ("幻梦样板"). A single item that can be empty (unencoded) or encoded with a processing recipe
 /// stored in its {@link FTComponents#FANTASY_PATTERN_DATA} component.
+@ParametersAreNonnullByDefault
 public class FantasyPatternItem extends Item {
 
     public FantasyPatternItem(Properties properties) {

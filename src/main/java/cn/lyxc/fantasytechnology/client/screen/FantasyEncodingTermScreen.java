@@ -14,6 +14,7 @@ import appeng.items.misc.WrappedGenericStack;
 import appeng.menu.SlotSemantics;
 import appeng.menu.slot.FakeSlot;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
+import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -32,6 +33,7 @@ import java.util.List;
 /// all 81 ingredient slots, but only a 3x3 window of them is visible at a time, so every frame this screen re-applies
 /// the base positions and then shifts and enables just the rows the scrollbar is currently over. That is the same
 /// approach AE2 uses for its own processing patterns.
+@MethodsReturnNonnullByDefault
 public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTermMenu> {
 
     /// Path passed to AE2's StyleManager; resolved against the ae2 namespace, hence the file's location.
