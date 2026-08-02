@@ -20,6 +20,7 @@ import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -140,7 +141,7 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<Ge
     /// Turns one recipe ingredient into a pattern ingredient, keeping the tag when the ingredient is exactly one tag.
     /// Anything more complex (a hand-written item list, or a NeoForge custom ingredient) falls back to its first
     /// matching item, since a fantasy pattern can only express "this key" or "anything in this tag".
-    private static PatternIngredient convert(Ingredient ingredient) {
+    private static @Nullable PatternIngredient convert(Ingredient ingredient) {
         ItemStack[] items = ingredient.getItems();
         if (items.length == 0) {
             return null;
@@ -155,7 +156,7 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<Ge
         return tag == null ? PatternIngredient.of(stack) : PatternIngredient.of(stack, tag);
     }
 
-    private static ResourceLocation tagOf(Ingredient ingredient) {
+    private static @Nullable ResourceLocation tagOf(Ingredient ingredient) {
         if (ingredient.isCustom()) {
             return null;
         }
