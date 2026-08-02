@@ -4,19 +4,24 @@ import appeng.api.client.AEKeyRendering;
 import appeng.api.config.ActionItems;
 import appeng.api.stacks.AEKey;
 import appeng.client.Point;
+import appeng.client.gui.Icon;
 import appeng.client.gui.me.common.MEStorageScreen;
 import appeng.client.gui.style.ScreenStyle;
 import appeng.client.gui.widgets.ActionButton;
+import appeng.client.gui.widgets.IconButton;
 import appeng.client.gui.widgets.Scrollbar;
 import appeng.core.localization.ButtonToolTips;
 import appeng.core.localization.Tooltips;
 import appeng.items.misc.WrappedGenericStack;
 import appeng.menu.SlotSemantics;
 import appeng.menu.slot.FakeSlot;
+import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
 import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
@@ -44,6 +49,10 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
     private static final int VISIBLE_ROWS = 3;
     private static final int SLOT_HEIGHT = 18;
 
+    /// Icon of the "double the amounts" button: one 16x16 frame, drawn at the button's full size.
+    private static final ResourceLocation DOUBLE_AMOUNTS_TEXTURE = ResourceLocation
+            .fromNamespaceAndPath(FantasyTechnology.MODID, "textures/gui/double_amounts.png");
+
     private final Scrollbar inputScrollbar;
 
     public FantasyEncodingTermScreen(FantasyEncodingTermMenu menu, Inventory playerInventory, Component title,
@@ -57,6 +66,33 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
         clearButton.setHalfSize(true);
         clearButton.setDisableBackground(true);
         widgets.add("clearPattern", clearButton);
+
+        // Doubles the amounts of the encoded ingredients and results. Sits on the left of the results block, below
+        // the clear button.
+        //
+        // The whole look comes from this mod's own texture, so renderWidget is replaced outright rather than going
+        // through an Icon from AE2's sprite sheet. That also discards everything else IconButton draws there - the
+        // button background, the hover highlight and the half-size scaling - which is why setHalfSize and
+        // setDisableBackground are not called: they only feed the rendering being replaced. The button therefore
+        // occupies its full 16x16 hit box, unlike the half-size clear button above it.
+        IconButton doubleButton = new IconButton(btn -> menu.doubleAmounts()) {
+            @Override
+            protected Icon getIcon() {
+                // Never consulted, since renderWidget below does not use it; only satisfies the abstract method.
+                return Icon.ARROW_UP;
+            }
+
+            @Override
+            public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+                guiGraphics.blit(DOUBLE_AMOUNTS_TEXTURE, getX(), getY(), 0, 0, 16, 16, 16, 16);
+            }
+
+            @Override
+            public List<Component> getTooltipMessage() {
+                return List.of(Component.translatable("gui.fantasy_technology.double_amounts"));
+            }
+        };
+        widgets.add("doubleAmounts", doubleButton);
 
         inputScrollbar = widgets.addScrollBar("inputScrollbar", Scrollbar.SMALL);
         inputScrollbar.setRange(0, menu.getInputSlots().length / INPUT_COLUMNS - VISIBLE_ROWS, VISIBLE_ROWS);

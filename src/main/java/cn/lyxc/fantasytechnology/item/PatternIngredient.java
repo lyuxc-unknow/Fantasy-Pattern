@@ -63,6 +63,17 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
         return stack.amount() <= 0;
     }
 
+    /// Whether this ingredient is satisfied by the given key: the exact key for an untagged ingredient, anything in
+    /// the tag otherwise.
+    public boolean matches(AEKey key) {
+        return tag.map(resourceLocation -> isInTag(key, resourceLocation)).orElseGet(() -> stack.what().equals(key));
+    }
+
+    /// A copy of this ingredient with a different amount, keeping its tag.
+    public PatternIngredient withAmount(long amount) {
+        return new PatternIngredient(new GenericStack(stack.what(), amount), tag);
+    }
+
     /// Whether a key belongs to a tag, resolved in whichever registry matches the key's type. A bare tag id is
     /// ambiguous on its own - {@code c:tanks} could name both an item and a fluid tag - so the key decides.
     ///

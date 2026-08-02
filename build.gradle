@@ -136,6 +136,11 @@ repositories {
      // AE2 JEI Integration, dev runs only: makes AE2 recipes show up in JEI so recipe transfer can be tested.
      // https://www.curseforge.com/minecraft/mc-mods/ae2-jei-integration
      localRuntime "curse.maven:ae2-jei-integration-${ae2_jei_integration_project}:${ae2_jei_integration_file}"
+
+     // Compatibility verification
+     localRuntime "maven.modrinth:modern-industrialization:2.5.5"
+     localRuntime "curse.maven:alltheleaks-1091339:8553655"
+     localRuntime "maven.modrinth:mekanism_extra:1.21.1-1.4.0"
  }
 
  var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

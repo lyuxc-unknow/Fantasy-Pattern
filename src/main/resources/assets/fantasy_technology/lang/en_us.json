@@ -7,5 +7,6 @@
   "item.fantasy_technology.fantasy_encoding_terminal": "Fantasy Encoding Terminal",
   "block.fantasy_technology.fantasy_annihilation": "Fantasy Annihilation",
   "gui.fantasy_technology.pattern_encoding": "Fantasy Pattern Encoding",
+  "gui.fantasy_technology.double_amounts": "Double the amounts of the encoded ingredients and results",
   "gui.fantasy_technology.transfer_unsupported": "This recipe cannot be encoded into a fantasy pattern"
 }

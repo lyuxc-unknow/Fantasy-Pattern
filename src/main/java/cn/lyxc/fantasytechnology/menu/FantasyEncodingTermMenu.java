@@ -29,9 +29,10 @@ import java.util.List;
 ///
 /// Built on AE2's {@link MEStorageMenu}, so it carries the full ME network item list on top of the encoding area.
 ///
-/// The ingredient slots are preview-only: they are filled by transferring a recipe and cannot be edited by hand,
-/// because an ingredient may carry a tag that a slot has no way to represent. The result slots are ordinary ghost
-/// slots and can be edited freely.
+/// The ingredient and result slots alike are preview-only: they are filled by transferring a recipe and changed
+/// through the terminal's own buttons, never by hand. For the ingredients that is a hard requirement, since an
+/// ingredient may carry a tag that a slot has no way to represent and editing it by hand would silently drop that
+/// tag.
 ///
 /// Slot positions come from the screen style at
 /// {@code assets/ae2/screens/terminals/fantasy_encoding_terminal.json}, matched up by slot semantic.
@@ -46,6 +47,11 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
     private static final String ACTION_ENCODE = "encode";
     private static final String ACTION_CLEAR = "clear";
+    private static final String ACTION_DOUBLE = "double";
+
+    /// Ceiling for {@link #doubleAmounts()}. Far past anything a real recipe asks for, and low enough that doubling
+    /// it once more still fits comfortably in a long.
+    private static final long MAX_AMOUNT = Integer.MAX_VALUE;
 
     private final IFantasyEncodingTerminalHost terminalHost;
     private final ConfigInventory encodedInputs;
@@ -74,7 +80,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
         InternalInventory outputInv = encodedOutputs.createMenuWrapper();
         for (int i = 0; i < outputSlots.length; i++) {
-            outputSlots[i] = new FakeSlot(outputInv, i);
+            outputSlots[i] = new PreviewSlot(outputInv, i);
             addSlot(outputSlots[i], SlotSemantics.PROCESSING_OUTPUTS);
         }
 
@@ -88,6 +94,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
         registerClientAction(ACTION_ENCODE, this::encode);
         registerClientAction(ACTION_CLEAR, this::clear);
+        registerClientAction(ACTION_DOUBLE, this::doubleAmounts);
     }
 
     public IFantasyEncodingTerminalHost getTerminalHost() {
@@ -214,6 +221,35 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         }
     }
 
+    /// Doubles the amount of every ingredient and result being encoded, keeping their tags. Safe to call from
+    /// either side.
+    public void doubleAmounts() {
+        if (isClientSide()) {
+            sendClientAction(ACTION_DOUBLE);
+            return;
+        }
+        for (int i = 0; i < inputSlots.length; i++) {
+            GenericStack stack = encodedInputs.getStack(i);
+            if (stack != null && stack.amount() > 0) {
+                encodedInputs.setStack(i, doubled(stack));
+            }
+        }
+        for (int i = 0; i < outputSlots.length; i++) {
+            GenericStack stack = encodedOutputs.getStack(i);
+            if (stack != null && stack.amount() > 0) {
+                encodedOutputs.setStack(i, doubled(stack));
+            }
+        }
+    }
+
+    /// The same stack with twice the amount, saturating at {@link #MAX_AMOUNT}. There is no button that halves the
+    /// amounts again, so without the ceiling a few too many clicks would run a long past its own range and leave a
+    /// negative amount behind, which no later click could undo.
+    private static GenericStack doubled(GenericStack stack) {
+        long amount = stack.amount() >= MAX_AMOUNT / 2 ? MAX_AMOUNT : stack.amount() * 2;
+        return new GenericStack(stack.what(), amount);
+    }
+
     /// Replaces the ingredients and results wholesale, used by the recipe viewer integration. Server side only.
     ///
     /// The ingredients carry the tag they came from, which is what makes a bookshelf pattern ask for any plank rather
@@ -277,11 +313,11 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     // Slots
     // ------------------------------------------------------------------------
 
-    /// An ingredient slot: a preview only.
+    /// A preview-only ghost slot, used for the ingredients and the results alike.
     ///
-    /// The ingredients define what a fantasy pattern will request, and they carry a tag that the slot itself cannot
-    /// represent, so letting the player edit them by hand would silently drop that tag. They are therefore filled only
-    /// by transferring a recipe.
+    /// Its contents are filled by transferring a recipe and changed through the terminal's buttons, never by hand.
+    /// For the ingredients that is a hard requirement: they carry a tag the slot itself cannot represent, so letting
+    /// the player edit them would silently drop it.
     ///
     /// Two methods are deliberately NOT overridden, because both are on the path the server uses to push slot contents
     /// to the client and blocking them leaves the slots empty on screen until the UI is reopened:

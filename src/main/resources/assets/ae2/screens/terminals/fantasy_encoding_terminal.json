@@ -75,6 +75,10 @@
       "left": 79,
       "bottom": 159
     },
+    "doubleAmounts": {
+      "left": 79,
+      "bottom": 119
+    },
     "encodePattern": {
       "left": 147,
       "bottom": 145
