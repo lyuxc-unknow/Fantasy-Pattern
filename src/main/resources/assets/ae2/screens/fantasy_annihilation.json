@@ -27,7 +27,7 @@
   "text": {
     "dialog_title": {
       "text": {
-        "translate": "block.fantasy_technology.fantasy_annihilation"
+        "translate": "gui.fantasy_technology.fantasy_annihilation.title"
       },
       "position": {
         "left": 8,

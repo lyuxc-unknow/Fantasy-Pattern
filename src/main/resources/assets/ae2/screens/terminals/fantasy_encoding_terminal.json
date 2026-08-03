@@ -26,7 +26,7 @@
   "text": {
     "dialog_title": {
       "text": {
-        "translate": "item.fantasy_technology.fantasy_encoding_terminal"
+        "translate": "gui.ae2.Terminal"
       },
       "position": {
         "left": 8,

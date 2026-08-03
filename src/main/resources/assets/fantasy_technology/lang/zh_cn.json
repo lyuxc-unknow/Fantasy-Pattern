@@ -1,12 +1,13 @@
 {
-  "itemGroup.fantasy_technology": "幻梦科技",
+  "itemGroup.fantasy_technology": "幻梦编码",
   "item.fantasy_technology.fantasy_pattern": "幻梦样板",
   "item.fantasy_technology.fantasy_pattern.empty": "未编码",
   "item.fantasy_technology.fantasy_pattern.outputs": "产物:",
   "item.fantasy_technology.fantasy_pattern.ingredients": "原料:",
   "item.fantasy_technology.fantasy_encoding_terminal": "幻梦编码终端",
-  "block.fantasy_technology.fantasy_annihilation": "幻梦寂灭",
+  "block.fantasy_technology.fantasy_annihilation": "幻梦分子重构演算样板供应器",
   "gui.fantasy_technology.pattern_encoding": "幻梦样板编码",
   "gui.fantasy_technology.double_amounts": "将已编码的输入与输出数量翻倍",
-  "gui.fantasy_technology.transfer_unsupported": "该配方无法编码为幻梦样板"
+  "gui.fantasy_technology.transfer_unsupported": "该配方无法编码为幻梦样板",
+  "gui.fantasy_technology.fantasy_annihilation.title": "幻梦分子重构演算样板供应器"
 }
