@@ -145,6 +145,8 @@ dependencies {
     localRuntime "maven.modrinth:mekanism_extra:1.21.1-1.4.0"
     localRuntime "maven.modrinth:cucumber:8.0.16"
     localRuntime "maven.modrinth:mystical-agriculture:8.0.27"
+    localRuntime "maven.modrinth:neoecoae:21.1.1"
+    localRuntime "maven.modrinth:ldlib:mc1.21.1-2.2.32-neoforge"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
