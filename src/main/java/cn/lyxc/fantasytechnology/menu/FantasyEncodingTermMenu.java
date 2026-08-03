@@ -5,6 +5,7 @@ import appeng.api.stacks.GenericStack;
 import appeng.helpers.InventoryAction;
 import appeng.menu.SlotSemantics;
 import appeng.menu.implementations.MenuTypeBuilder;
+import appeng.menu.guisync.GuiSync;
 import appeng.menu.me.common.MEStorageMenu;
 import appeng.menu.slot.AppEngSlot;
 import appeng.menu.slot.FakeSlot;
@@ -48,6 +49,20 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     private static final String ACTION_ENCODE = "encode";
     private static final String ACTION_CLEAR = "clear";
     private static final String ACTION_DOUBLE = "double";
+    private static final String ACTION_TOGGLE_IGNORE = "toggleIgnore";
+
+    /// The ignore-data flags, packed into a bitset that AE2's menu synchronisation carries to the client.
+    ///
+    /// They live on the part, and a client's copy of a part is never told about a change the server made on its own -
+    /// a recipe transferred in from JEI, a clear, an encoded pattern decoded back into the grid. Mirroring them here
+    /// every tick keeps the screen's right-click tooltip honest instead of letting it drift. Ids 100 and 101 are
+    /// taken by {@link MEStorageMenu}.
+    @GuiSync(110)
+    public long inputIgnoreLow;
+    @GuiSync(111)
+    public long inputIgnoreHigh;
+    @GuiSync(112)
+    public int outputIgnoreBits;
 
     /// Ceiling for {@link #doubleAmounts()}. A click that would push any single ingredient or result past this is
     /// cancelled wholesale, so all entries always stay on the same multiple of the original amounts. The ceiling
@@ -96,6 +111,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         registerClientAction(ACTION_ENCODE, this::encode);
         registerClientAction(ACTION_CLEAR, this::clear);
         registerClientAction(ACTION_DOUBLE, this::doubleAmounts);
+        registerClientAction(ACTION_TOGGLE_IGNORE, Integer.class, this::toggleIgnore);
     }
 
     public IFantasyEncodingTerminalHost getTerminalHost() {
@@ -121,8 +137,50 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
                 lastEncodedPattern = current.copy();
                 loadPattern(current);
             }
+            packIgnoreFlags();
         }
         super.broadcastChanges();
+    }
+
+    /// Copies the part's ignore-data flags into the synchronised bitset. Server side only; the client reads the
+    /// result through {@link #isInputIgnored(int)} and {@link #isOutputIgnored(int)}.
+    private void packIgnoreFlags() {
+        long low = 0;
+        long high = 0;
+        for (int i = 0; i < inputSlots.length; i++) {
+            if (terminalHost.getInputIgnore(i)) {
+                if (i < Long.SIZE) {
+                    low |= 1L << i;
+                } else {
+                    high |= 1L << (i - Long.SIZE);
+                }
+            }
+        }
+        int outputs = 0;
+        for (int i = 0; i < outputSlots.length; i++) {
+            if (terminalHost.getOutputIgnore(i)) {
+                outputs |= 1 << i;
+            }
+        }
+        inputIgnoreLow = low;
+        inputIgnoreHigh = high;
+        outputIgnoreBits = outputs;
+    }
+
+    /// Whether ingredient slot {@code slot} ignores data components. Answers the same on both sides, unlike asking
+    /// the part directly.
+    public boolean isInputIgnored(int slot) {
+        if (slot < 0 || slot >= inputSlots.length) {
+            return false;
+        }
+        return slot < Long.SIZE
+                ? (inputIgnoreLow >>> slot & 1L) != 0
+                : (inputIgnoreHigh >>> (slot - Long.SIZE) & 1L) != 0;
+    }
+
+    /// Whether result slot {@code slot} ignores data components. Answers the same on both sides.
+    public boolean isOutputIgnored(int slot) {
+        return slot >= 0 && slot < outputSlots.length && (outputIgnoreBits >>> slot & 1) != 0;
     }
 
     /// AE2 routes clicks on ghost slots through here rather than through the vanilla click handling, including the
@@ -180,12 +238,20 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         }
 
         List<PatternIngredient> inputs = collectInputs();
-        List<GenericStack> outputs = collectOutputs();
+        List<GenericStack> outputs = new ArrayList<>();
+        List<Boolean> outputsIgnore = new ArrayList<>();
+        for (int i = 0; i < outputSlots.length; i++) {
+            GenericStack stack = encodedOutputs.getStack(i);
+            if (stack != null && stack.amount() > 0) {
+                outputs.add(stack);
+                outputsIgnore.add(terminalHost.getOutputIgnore(i));
+            }
+        }
         if (inputs.isEmpty() || outputs.isEmpty()) {
             return;
         }
 
-        ItemStack encoded = FantasyPatternItem.encode(inputs, outputs);
+        ItemStack encoded = FantasyPatternItem.encode(inputs, outputs, outputsIgnore);
 
         ItemStack existing = encodedPatternSlot.getItem().copy();
         if (existing.isEmpty()) {
@@ -207,6 +273,24 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         lastEncodedPattern = encodedPatternSlot.getItem().copy();
     }
 
+    /// Toggles the ignore-data flag of one encoding entry. Safe to call from either side.
+    ///
+    /// {@code entry} is an index into the ingredient slots followed by the result slots - not a menu slot index, and
+    /// not a screen position. The client only forwards the request: the flag lives on the part, and the answer comes
+    /// back through the synchronised bitset on the next broadcast, so the two sides cannot drift apart.
+    public void toggleIgnore(int entry) {
+        if (isClientSide()) {
+            sendClientAction(ACTION_TOGGLE_IGNORE, entry);
+            return;
+        }
+        if (entry >= 0 && entry < inputSlots.length) {
+            terminalHost.setInputIgnore(entry, !terminalHost.getInputIgnore(entry));
+        } else if (entry >= inputSlots.length && entry < inputSlots.length + outputSlots.length) {
+            int output = entry - inputSlots.length;
+            terminalHost.setOutputIgnore(output, !terminalHost.getOutputIgnore(output));
+        }
+    }
+
     /// Clears the ingredients and results. Safe to call from either side.
     public void clear() {
         if (isClientSide()) {
@@ -216,9 +300,11 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         for (int i = 0; i < inputSlots.length; i++) {
             encodedInputs.setStack(i, null);
             terminalHost.setInputTag(i, null);
+            terminalHost.setInputIgnore(i, false);
         }
         for (int i = 0; i < outputSlots.length; i++) {
             encodedOutputs.setStack(i, null);
+            terminalHost.setOutputIgnore(i, false);
         }
     }
 
@@ -265,24 +351,32 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         return false;
     }
 
+    public void setEncodedRecipe(List<PatternIngredient> inputs, List<GenericStack> outputs) {
+        setEncodedRecipe(inputs, outputs, List.of());
+    }
+
     /// Replaces the ingredients and results wholesale, used by the recipe viewer integration. Server side only.
     ///
     /// The ingredients carry the tag they came from, which is what makes a bookshelf pattern ask for any plank rather
     /// than the particular one the recipe viewer happened to display.
-    public void setEncodedRecipe(List<PatternIngredient> inputs, List<GenericStack> outputs) {
+    public void setEncodedRecipe(List<PatternIngredient> inputs, List<GenericStack> outputs,
+            List<Boolean> outputsIgnore) {
         for (int i = 0; i < inputSlots.length; i++) {
             PatternIngredient ingredient = i < inputs.size() ? inputs.get(i) : null;
             if (ingredient == null || ingredient.isEmpty()) {
                 encodedInputs.setStack(i, null);
                 terminalHost.setInputTag(i, null);
+                terminalHost.setInputIgnore(i, false);
             } else {
                 encodedInputs.setStack(i, ingredient.stack());
                 terminalHost.setInputTag(i, ingredient.tag().orElse(null));
+                terminalHost.setInputIgnore(i, ingredient.ignoreData());
             }
         }
         for (int i = 0; i < outputSlots.length; i++) {
             GenericStack stack = i < outputs.size() ? outputs.get(i) : null;
             encodedOutputs.setStack(i, stack != null && stack.amount() > 0 ? stack : null);
+            terminalHost.setOutputIgnore(i, i < outputsIgnore.size() && outputsIgnore.get(i));
         }
     }
 
@@ -290,16 +384,17 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     // Helpers
     // ------------------------------------------------------------------------
 
-    /// Loads an encoded pattern back into the ingredient and result slots, tags included.
+    /// Loads an encoded pattern back into the ingredient and result slots, tags and ignore-data flags included.
     private void loadPattern(ItemStack stack) {
         FantasyPatternData data = FantasyPatternItem.getData(stack);
         if (data == null) {
             return;
         }
-        setEncodedRecipe(data.inputs(), data.outputs());
+        setEncodedRecipe(data.inputs(), data.outputs(), data.outputsIgnore());
     }
 
-    /// The ingredients as encoded, each carrying the tag its slot was filled from (if it is still valid).
+    /// The ingredients as encoded, each carrying the tag its slot was filled from (if it is still valid) and the
+    /// slot's ignore-data flag.
     private List<PatternIngredient> collectInputs() {
         List<PatternIngredient> ingredients = new ArrayList<>();
         for (int i = 0; i < inputSlots.length; i++) {
@@ -308,28 +403,17 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
                 continue;
             }
             ResourceLocation tag = terminalHost.getInputTag(i);
-            ingredients.add(tag == null ? PatternIngredient.of(stack) : PatternIngredient.of(stack, tag));
+            PatternIngredient ingredient = tag == null ? PatternIngredient.of(stack)
+                    : PatternIngredient.of(stack, tag);
+            ingredients.add(ingredient.withIgnoreData(terminalHost.getInputIgnore(i)));
         }
         return ingredients;
-    }
-
-    private List<GenericStack> collectOutputs() {
-        List<GenericStack> stacks = new ArrayList<>();
-        for (int i = 0; i < outputSlots.length; i++) {
-            GenericStack stack = encodedOutputs.getStack(i);
-            if (stack != null && stack.amount() > 0) {
-                stacks.add(stack);
-            }
-        }
-        return stacks;
     }
 
     // ------------------------------------------------------------------------
     // Slots
     // ------------------------------------------------------------------------
 
-    /// A preview-only ghost slot, used for the ingredients and the results alike.
-    ///
     /// Its contents are filled by transferring a recipe and changed through the terminal's buttons, never by hand.
     /// For the ingredients that is a hard requirement: they carry a tag the slot itself cannot represent, so letting
     /// the player edit them would silently drop it.

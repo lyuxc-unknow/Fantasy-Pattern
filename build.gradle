@@ -20,7 +20,7 @@ sourceSets.main.resources {
 
 
 base {
-    archivesName = "FantasyEncodeTerminal-" + minecraft_version
+    archivesName = "FantasyPattern-" + minecraft_version
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -142,6 +142,8 @@ dependencies {
     localRuntime "maven.modrinth:modern-industrialization:2.5.5"
     localRuntime "curse.maven:alltheleaks-1091339:8553655"
     localRuntime "maven.modrinth:mekanism_extra:1.21.1-1.4.0"
+    localRuntime "maven.modrinth:cucumber:8.0.16"
+    localRuntime "maven.modrinth:mystical-agriculture:8.0.27"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

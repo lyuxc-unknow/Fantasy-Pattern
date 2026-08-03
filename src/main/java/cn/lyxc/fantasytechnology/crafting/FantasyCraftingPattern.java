@@ -7,6 +7,8 @@ import appeng.api.stacks.GenericStack;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.registry.FTComponents;
+import net.minecraft.world.item.DiggerItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,6 +19,14 @@ import java.util.List;
 /// (up to 81 ingredients, up to 6 results, items and fluids alike) to AE2's autocrafting system so that crafting CPUs
 /// can plan and execute it. Execution happens inside the fantasy annihilation block only - the pattern cannot be
 /// executed by pattern providers or molecular assemblers.
+///
+/// Reusable ingredients - tools, infusion crystals, buckets - are declared to AE2 as container items: one goes into
+/// each craft and a worn one comes back out, which {@link Input#getRemainingKey} spells out. That single fact is
+/// what keeps a plan sane, because AE2's calculator marks any process holding container items as limited-quantity:
+/// it then plans the crafts one at a time and feeds each returned item into the next craft. A 1000-use crystal
+/// therefore shows up once in a plan that runs 85 crafts instead of 85 times, and a second one is only requested at
+/// the point where the first would break. No durability is counted here by hand - stating what one use leaves
+/// behind is enough for the calculator to derive how many tools the job needs.
 public class FantasyCraftingPattern implements IPatternDetails {
 
     private final AEItemKey definition;
@@ -39,6 +49,49 @@ public class FantasyCraftingPattern implements IPatternDetails {
         this.outputs = List.copyOf(data.outputs());
     }
 
+    /// Whether a craft wears this ingredient down instead of consuming it: damageable items, items with a
+    /// crafting-remaining form (buckets, reusable infusion crystals), and diggers that carry no durability at all.
+    public static boolean isReusable(AEKey key) {
+        if (!(key instanceof AEItemKey itemKey)) {
+            return false;
+        }
+        ItemStack stack = itemKey.toStack();
+        return stack.isDamageableItem() || !stack.getCraftingRemainingItem().isEmpty()
+                || itemKey.getItem() instanceof DiggerItem;
+    }
+
+    /// What one use of a reusable ingredient leaves behind:
+    ///
+    /// - its crafting-remaining form when it has one, so a water bucket comes back as an empty bucket;
+    /// - the same item with one more point of damage when it is damageable;
+    /// - the item unchanged when it is a tool that carries no durability at all;
+    /// - null for everything else, including the moment one more point of damage would break it - which is how AE2
+    ///   learns that this particular one is used up and that the plan needs a replacement from here on.
+    ///
+    /// The decision is made per key rather than once per ingredient, because a tagged ingredient is only classified
+    /// by its representative: a tag holding both a water bucket and a plain bucket would otherwise hand the plain
+    /// one straight back, and an ingredient that is never consumed is an ingredient duplicated for free.
+    @Nullable
+    static AEKey wearDown(AEKey template) {
+        if (!(template instanceof AEItemKey itemKey)) {
+            return null;
+        }
+        ItemStack stack = itemKey.toStack();
+        ItemStack remaining = stack.getCraftingRemainingItem();
+        if (!remaining.isEmpty()) {
+            return AEItemKey.of(remaining);
+        }
+        if (stack.isDamageableItem()) {
+            int damage = stack.getDamageValue() + 1;
+            if (damage >= stack.getMaxDamage()) {
+                return null;
+            }
+            stack.setDamageValue(damage);
+            return AEItemKey.of(stack);
+        }
+        return itemKey.getItem() instanceof DiggerItem ? itemKey : null;
+    }
+
     /// Turns one aggregated ingredient into an AE2 input.
     ///
     /// A tagged ingredient offers everything in the tag as a possible input, so the crafting planner picks whichever
@@ -52,7 +105,8 @@ public class FantasyCraftingPattern implements IPatternDetails {
         if (possible.isEmpty()) {
             return null;
         }
-        return new Input(possible.toArray(GenericStack[]::new), multiplier, key);
+        return new Input(possible.toArray(GenericStack[]::new), multiplier, key,
+                isReusable(key.representative()));
     }
 
     /// Decodes a fantasy pattern item key into pattern details, or null if it is not an encoded fantasy pattern.
@@ -107,9 +161,10 @@ public class FantasyCraftingPattern implements IPatternDetails {
     }
 
     /// One ingredient of the recipe: {@code multiplier} of it per craft, satisfied by any of {@code possible} - a
-    /// single entry for an exact ingredient, everything in the tag for a tagged one. No container/remaining items.
-    private record Input(GenericStack[] possible, long multiplier, FantasyPatternData.IngredientKey key)
-            implements IInput {
+    /// single entry for an exact ingredient, everything in the tag for a tagged one.
+    private record Input(GenericStack[] possible, long multiplier, FantasyPatternData.IngredientKey key,
+            boolean reusable) implements IInput {
+
         @Override
         public GenericStack[] getPossibleInputs() {
             return possible;
@@ -120,15 +175,28 @@ public class FantasyCraftingPattern implements IPatternDetails {
             return multiplier;
         }
 
+        /// AE2 filters both the network and the crafting simulation through this, so it decides what a craft may
+        /// actually pick up.
+        ///
+        /// A reusable ingredient has to accept its own worn states on top of whatever the encoded ingredient says.
+        /// The pattern was encoded from a pristine crystal, but from the second craft onwards the only one around
+        /// is the crystal this pattern handed back a moment ago - refusing it would make the calculator ask for a
+        /// fresh crystal every single craft, which is the whole problem this avoids. Tagged ingredients already
+        /// behave this way, since tag membership is a property of the item and ignores wear.
         @Override
         public boolean isValid(AEKey input, Level level) {
-            return key.matches(input);
+            if (key.matches(input)) {
+                return true;
+            }
+            return reusable && input instanceof AEItemKey item
+                    && key.representative() instanceof AEItemKey representative
+                    && item.getItem() == representative.getItem();
         }
 
         @Nullable
         @Override
         public AEKey getRemainingKey(AEKey template) {
-            return null;
+            return reusable ? wearDown(template) : null;
         }
     }
 }

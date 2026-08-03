@@ -8,6 +8,8 @@
   "block.fantasy_technology.fantasy_annihilation": "幻梦分子重构演算样板供应器",
   "gui.fantasy_technology.pattern_encoding": "幻梦样板编码",
   "gui.fantasy_technology.double_amounts": "将已编码的输入与输出数量翻倍",
+  "gui.fantasy_technology.ignore_data_yes": "忽略数据标签：是（右键切换）",
+  "gui.fantasy_technology.ignore_data_no": "忽略数据标签：否（右键切换）",
   "gui.fantasy_technology.transfer_unsupported": "该配方无法编码为幻梦样板",
   "gui.fantasy_technology.fantasy_annihilation.title": "幻梦分子重构演算样板供应器"
 }

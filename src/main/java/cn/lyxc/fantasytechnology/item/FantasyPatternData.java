@@ -11,6 +11,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,19 +25,29 @@ import java.util.Optional;
 /// that consumes water and produces a liquid encodes exactly like one made of items.
 ///
 /// Ingredients may be tag-based (see {@link PatternIngredient}), in which case autocrafting will accept anything in the
-/// tag instead of insisting on what the pattern happened to be encoded with.
+/// tag instead of insisting on what the pattern happened to be encoded with. Per-entry {@code ignoreData} flags drop
+/// data components when matching; {@link #outputsIgnore()} holds the parallel flags for the results (kept for display
+/// and re-editing, they carry no matching semantics).
 ///
 /// The pattern itself is the recipe - no live recipe lookup happens when it is used.
-public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericStack> outputs) {
+public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericStack> outputs,
+        List<Boolean> outputsIgnore) {
 
     /// How many ingredient entries a single pattern can hold.
     public static final int MAX_INPUTS = 81;
     /// How many result entries a single pattern can hold.
     public static final int MAX_OUTPUTS = 6;
 
+    /// Compatibility constructor for data that predates the ignore-data flags (everything then defaults to false).
+    public FantasyPatternData(List<PatternIngredient> inputs, List<GenericStack> outputs) {
+        this(inputs, outputs, List.of());
+    }
+
     public static final Codec<FantasyPatternData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             PatternIngredient.CODEC.listOf().fieldOf("inputs").forGetter(FantasyPatternData::inputs),
-            GenericStack.CODEC.listOf().fieldOf("outputs").forGetter(FantasyPatternData::outputs))
+            GenericStack.CODEC.listOf().fieldOf("outputs").forGetter(FantasyPatternData::outputs),
+            Codec.BOOL.listOf().optionalFieldOf("outputsIgnore", List.of())
+                    .forGetter(FantasyPatternData::outputsIgnore))
             .apply(instance, FantasyPatternData::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, FantasyPatternData> STREAM_CODEC = StreamCodec.composite(
@@ -44,11 +55,24 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
             FantasyPatternData::inputs,
             GenericStack.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_OUTPUTS)),
             FantasyPatternData::outputs,
+            ByteBufCodecs.BOOL.apply(ByteBufCodecs.list(MAX_OUTPUTS)),
+            FantasyPatternData::outputsIgnore,
             FantasyPatternData::new);
 
     public FantasyPatternData {
         inputs = inputs.stream().filter(ingredient -> !ingredient.isEmpty()).toList();
-        outputs = outputs.stream().filter(stack -> stack != null && stack.amount() > 0).toList();
+        // Filter outputs and their ignore flags together so the two lists stay in lockstep.
+        List<GenericStack> keptOutputs = new ArrayList<>();
+        List<Boolean> keptIgnore = new ArrayList<>();
+        for (int i = 0; i < outputs.size(); i++) {
+            GenericStack stack = outputs.get(i);
+            if (stack != null && stack.amount() > 0) {
+                keptOutputs.add(stack);
+                keptIgnore.add(i < outputsIgnore.size() ? outputsIgnore.get(i) : Boolean.FALSE);
+            }
+        }
+        outputs = List.copyOf(keptOutputs);
+        outputsIgnore = List.copyOf(keptIgnore);
         if (inputs.size() > MAX_INPUTS) {
             throw new IllegalArgumentException(
                     "Fantasy pattern allows at most " + MAX_INPUTS + " ingredients, got " + inputs.size());
@@ -74,12 +98,13 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
         return !inputs.isEmpty() && !outputs.isEmpty();
     }
 
-    /// The identity of one aggregated ingredient: either a tag, or an exact key - never both. Built through
-    /// {@link #of(PatternIngredient)} so that equality behaves accordingly.
-    public record IngredientKey(@Nullable ResourceLocation tag, AEKey representative) {
+    /// The identity of one aggregated ingredient: either a tag, or an exact key - never both - plus whether data
+    /// components are ignored when matching. Built through {@link #of(PatternIngredient)} so that equality behaves
+    /// accordingly.
+    public record IngredientKey(@Nullable ResourceLocation tag, AEKey representative, boolean ignoreData) {
 
         public static IngredientKey of(PatternIngredient ingredient) {
-            return new IngredientKey(ingredient.tag().orElse(null), ingredient.what());
+            return new IngredientKey(ingredient.tag().orElse(null), ingredient.what(), ingredient.ignoreData());
         }
 
         public boolean isTagged() {
@@ -90,12 +115,17 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
             if (key == null) {
                 return false;
             }
-            return tag != null ? PatternIngredient.isInTag(key, tag) : representative.equals(key);
+            if (tag != null) {
+                return PatternIngredient.isInTag(key, tag);
+            }
+            return ignoreData ? representative.dropSecondary().equals(key.dropSecondary())
+                    : representative.equals(key);
         }
 
         /// Every key that satisfies this ingredient, the representative first.
         public List<AEKey> possibleKeys() {
-            return new PatternIngredient(new GenericStack(representative, 1), Optional.ofNullable(tag)).possibleKeys();
+            return new PatternIngredient(new GenericStack(representative, 1), Optional.ofNullable(tag),
+                    ignoreData).possibleKeys();
         }
 
         /// How this ingredient reads in a tooltip: the tag id when tagged, the key's name otherwise.
@@ -104,10 +134,12 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
         }
 
         // Records compare every component, but two entries for the same tag must be equal regardless of which key was
-        // stored as the representative.
+        // stored as the representative. The ignore-data flag only separates exact-key entries: it has no meaning for
+        // tag entries (tag matching never compares components), so those still merge freely.
         @Override
         public boolean equals(Object obj) {
-            if (!(obj instanceof IngredientKey(ResourceLocation otherTag, AEKey otherRepresentative))) {
+            if (!(obj instanceof IngredientKey(ResourceLocation otherTag, AEKey otherRepresentative,
+                    boolean otherIgnoreData))) {
                 return false;
             }
             if (tag != null || otherTag != null) {
@@ -115,12 +147,15 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
                 return tag != null && tag.equals(otherTag)
                         && representative.getType() == otherRepresentative.getType();
             }
-            return representative.equals(otherRepresentative);
+            return representative.equals(otherRepresentative) && ignoreData == otherIgnoreData;
         }
 
         @Override
         public int hashCode() {
-            return tag != null ? tag.hashCode() : representative.hashCode();
+            if (tag != null) {
+                return tag.hashCode();
+            }
+            return representative.hashCode() * 31 + (ignoreData ? 1 : 0);
         }
     }
 }

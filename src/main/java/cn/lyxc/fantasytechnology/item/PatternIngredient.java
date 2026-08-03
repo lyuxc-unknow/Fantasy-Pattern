@@ -30,13 +30,21 @@ import java.util.Optional;
 /// because each key type's tags live in a different registry - which one to look in is decided by the representative's
 /// key type.
 ///
-/// Tags come from the recipe a pattern was filled from, so encoding a bookshelf recipe stores {@code #minecraft:planks}
-/// rather than the particular plank the recipe viewer happened to display.
-public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> tag) {
+/// {@code ignoreData} drops the key's data components (NBT) when matching an exact ingredient, so a pattern that asks
+/// for an enchanted book also matches a plain one and vice versa. Tags come from the recipe a pattern was filled from,
+/// so encoding a bookshelf recipe stores {@code #minecraft:planks} rather than the particular plank the recipe viewer
+/// happened to display.
+public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> tag, boolean ignoreData) {
+
+    /// An ingredient without the ignore-data flag; kept for compatibility with data that predates it.
+    public PatternIngredient(GenericStack stack, Optional<ResourceLocation> tag) {
+        this(stack, tag, false);
+    }
 
     public static final Codec<PatternIngredient> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             GenericStack.CODEC.fieldOf("stack").forGetter(PatternIngredient::stack),
-            ResourceLocation.CODEC.optionalFieldOf("tag").forGetter(PatternIngredient::tag))
+            ResourceLocation.CODEC.optionalFieldOf("tag").forGetter(PatternIngredient::tag),
+            Codec.BOOL.optionalFieldOf("ignoreData", false).forGetter(PatternIngredient::ignoreData))
             .apply(instance, PatternIngredient::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PatternIngredient> STREAM_CODEC = StreamCodec.composite(
@@ -44,6 +52,8 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
             PatternIngredient::stack,
             ByteBufCodecs.optional(ResourceLocation.STREAM_CODEC.cast()),
             PatternIngredient::tag,
+            ByteBufCodecs.BOOL,
+            PatternIngredient::ignoreData,
             PatternIngredient::new);
 
     /// An ingredient that requires this exact key.
@@ -68,15 +78,24 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
         return stack.amount() <= 0;
     }
 
-    /// Whether this ingredient is satisfied by the given key: the exact key for an untagged ingredient, anything in
-    /// the tag otherwise.
+    /// Whether this ingredient is satisfied by the given key: the exact key for an untagged ingredient - compared
+    /// without data components when {@link #ignoreData()} is set - anything in the tag otherwise.
     public boolean matches(AEKey key) {
-        return tag.map(resourceLocation -> isInTag(key, resourceLocation)).orElseGet(() -> stack.what().equals(key));
+        if (tag.isPresent()) {
+            return isInTag(key, tag.get());
+        }
+        AEKey wanted = stack.what();
+        return ignoreData ? wanted.dropSecondary().equals(key.dropSecondary()) : wanted.equals(key);
     }
 
-    /// A copy of this ingredient with a different amount, keeping its tag.
+    /// A copy of this ingredient with a different amount, keeping its tag and ignore-data flag.
     public PatternIngredient withAmount(long amount) {
-        return new PatternIngredient(new GenericStack(stack.what(), amount), tag);
+        return new PatternIngredient(new GenericStack(stack.what(), amount), tag, ignoreData);
+    }
+
+    /// A copy of this ingredient with a different ignore-data flag.
+    public PatternIngredient withIgnoreData(boolean ignoreData) {
+        return new PatternIngredient(stack, tag, ignoreData);
     }
 
     /// Whether a key belongs to a tag, resolved in whichever registry matches the key's type. A bare tag id is

@@ -14,6 +14,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.DiggerItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
@@ -91,8 +92,11 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<Ge
                     .orElse(null);
 
             // Merging happens before the cap, so a recipe with more slots than a pattern can hold still contributes
-            // its full amount to the entry it collapses into.
+            // its full amount to the entry it collapses into. Durable tools (axes, hoes, ...) then have their
+            // ignore-data flag set automatically, so "repair/upgrade an axe" recipes accept any damage state instead
+            // of the exact one the recipe viewer happened to display.
             List<PatternIngredient> ingredients = mergeIngredients(buildIngredients(recipe, inputs)).stream()
+                    .map(TransferRecipePayload::ignoreDamageForTools)
                     .limit(FantasyPatternData.MAX_INPUTS)
                     .toList();
 
@@ -119,6 +123,20 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<Ge
                     (kept, extra) -> kept.withAmount(kept.amount() + extra.amount()));
         }
         return new ArrayList<>(merged.values());
+    }
+
+    /// Sets the ignore-data flag on exact item ingredients that are tools, so durable tool inputs transferred from a
+    /// recipe - axes, hoes, and modded "transfer damage" upgrade recipes such as Mystical Agriculture's essence gear -
+    /// match any damage state instead of the exact one JEI displayed. Covers both ordinary tools (any damage) and
+    /// "infinite durability" tools that report no max damage but are still tool items. Tag ingredients, non-tool
+    /// items, fluids and chemicals are left alone.
+    private static PatternIngredient ignoreDamageForTools(PatternIngredient ingredient) {
+        if (ingredient.tag().isEmpty() && ingredient.what() instanceof AEItemKey itemKey) {
+            if (itemKey.toStack().isDamageableItem() || itemKey.getItem() instanceof DiggerItem) {
+                return ingredient.withIgnoreData(true);
+            }
+        }
+        return ingredient;
     }
 
     /// Merges the recipe's tagged ingredients with the viewer's displayed stacks into the final ingredient list.

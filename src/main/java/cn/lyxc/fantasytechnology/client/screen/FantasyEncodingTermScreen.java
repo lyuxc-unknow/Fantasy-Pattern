@@ -17,12 +17,14 @@ import appeng.menu.SlotSemantics;
 import appeng.menu.slot.FakeSlot;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
+import cn.lyxc.fantasytechnology.part.FantasyEncodingTerminalPart;
 import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
@@ -129,22 +131,79 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
         return false;
     }
 
+    /// Right-clicking an ingredient or result slot toggles whether that entry ignores data components (NBT) when
+    /// matched. The index handed to the menu counts the ingredient slots first and the results after them; it is not
+    /// a menu slot index.
+    @Override
+    public boolean mouseClicked(double x, double y, int button) {
+        if (button == 1) {
+            for (int i = 0; i < menu.getInputSlots().length; i++) {
+                FakeSlot slot = menu.getInputSlots()[i];
+                if (slot.isActive() && isHovering(slot.x, slot.y, 16, 16, x, y)) {
+                    menu.toggleIgnore(i);
+                    return true;
+                }
+            }
+            for (int i = 0; i < menu.getOutputSlots().length; i++) {
+                FakeSlot slot = menu.getOutputSlots()[i];
+                if (slot.isActive() && isHovering(slot.x, slot.y, 16, 16, x, y)) {
+                    menu.toggleIgnore(FantasyEncodingTerminalPart.INPUT_SLOTS + i);
+                    return true;
+                }
+            }
+        }
+        return super.mouseClicked(x, y, button);
+    }
+
     /// Fluid and chemical entries in the ingredient and result ghost slots are stored as {@link WrappedGenericStack},
     /// whose vanilla tooltip is just the wrapper item's name - no fluid, no amount. Replace it with the key's own
     /// tooltip plus a formatted amount line, matching what the ME network view shows. Item entries pass through
-    /// unchanged.
+    /// unchanged. The hovered ingredient/result slot's ignore-data state is appended to the tooltip so the toggle is
+    /// visible without trial and error.
     @Override
     protected List<Component> getTooltipFromContainerItem(ItemStack stack) {
+        List<Component> tooltip;
         if (stack.getItem() instanceof WrappedGenericStack wrapped) {
             AEKey what = wrapped.unwrapWhat(stack);
             if (what != null) {
-                List<Component> tooltip = new ArrayList<>(AEKeyRendering.getTooltip(what));
+                tooltip = new ArrayList<>(AEKeyRendering.getTooltip(what));
                 tooltip.add(Tooltips.getAmountTooltip(ButtonToolTips.StoredAmount, what,
                         wrapped.unwrapAmount(stack)));
-                return tooltip;
+            } else {
+                tooltip = new ArrayList<>(super.getTooltipFromContainerItem(stack));
+            }
+        } else {
+            tooltip = new ArrayList<>(super.getTooltipFromContainerItem(stack));
+        }
+        appendIgnoreStatus(tooltip);
+        return tooltip;
+    }
+
+    /// Appends the ignore-data state of the hovered ingredient or result slot, so right-click toggling is visible
+    /// in the tooltip. Read from the menu's synchronised bitset rather than from the part, whose client-side copy
+    /// never hears about a change the server made on its own.
+    private void appendIgnoreStatus(List<Component> tooltip) {
+        Slot slot = hoveredSlot;
+        if (slot == null) {
+            return;
+        }
+        for (int i = 0; i < menu.getInputSlots().length; i++) {
+            if (menu.getInputSlots()[i] == slot) {
+                tooltip.add(ignoreStatusLine(menu.isInputIgnored(i)));
+                return;
             }
         }
-        return super.getTooltipFromContainerItem(stack);
+        for (int i = 0; i < menu.getOutputSlots().length; i++) {
+            if (menu.getOutputSlots()[i] == slot) {
+                tooltip.add(ignoreStatusLine(menu.isOutputIgnored(i)));
+                return;
+            }
+        }
+    }
+
+    private static Component ignoreStatusLine(boolean ignore) {
+        return Component.translatable(ignore ? "gui.fantasy_technology.ignore_data_yes"
+                : "gui.fantasy_technology.ignore_data_no");
     }
 
     @Override

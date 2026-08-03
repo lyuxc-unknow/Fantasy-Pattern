@@ -39,8 +39,14 @@ public class FantasyPatternItem extends Item {
 
     /// Creates an encoded fantasy pattern from a set of ingredients and results.
     public static ItemStack encode(List<PatternIngredient> inputs, List<GenericStack> outputs) {
+        return encode(inputs, outputs, List.of());
+    }
+
+    /// Creates an encoded fantasy pattern, including the per-result ignore-data flags.
+    public static ItemStack encode(List<PatternIngredient> inputs, List<GenericStack> outputs,
+            List<Boolean> outputsIgnore) {
         ItemStack pattern = new ItemStack(FTItems.FANTASY_PATTERN.get());
-        pattern.set(FTComponents.FANTASY_PATTERN_DATA, new FantasyPatternData(inputs, outputs));
+        pattern.set(FTComponents.FANTASY_PATTERN_DATA, new FantasyPatternData(inputs, outputs, outputsIgnore));
         return pattern;
     }
 

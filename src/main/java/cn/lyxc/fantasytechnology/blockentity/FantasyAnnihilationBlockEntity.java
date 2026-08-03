@@ -13,6 +13,7 @@ import appeng.api.networking.ticking.IGridTickable;
 import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.networking.ticking.TickingRequest;
 import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import appeng.blockentity.grid.AENetworkedInvBlockEntity;
@@ -30,6 +31,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
@@ -137,9 +139,22 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
             }
         }
 
-        // Annihilate the ingredients. The CPU has already extracted them from the network, so their
-        // ownership is ours - emptying the counters simply makes them vanish.
-        for (KeyCounter counter : inputHolder) {
+        // Annihilate the ingredients, but hand back whatever a craft only wears down rather than consumes. The CPU
+        // extracted every input from the network before calling us and is already waiting for those remainders - a
+        // crystal with one more point of damage, an empty bucket - so they have to come back or the job stalls. The
+        // rest simply vanishes: emptying the counter is all it takes, since the network no longer holds it.
+        IPatternDetails.IInput[] patternInputs = pattern.getInputs();
+        for (int i = 0; i < inputHolder.length; i++) {
+            KeyCounter counter = inputHolder[i];
+            if (i < patternInputs.length) {
+                IPatternDetails.IInput input = patternInputs[i];
+                for (var entry : counter) {
+                    AEKey remaining = input.getRemainingKey(entry.getKey());
+                    if (remaining != null) {
+                        pendingOutputs.add(remaining, entry.getLongValue());
+                    }
+                }
+            }
             counter.reset();
         }
 
@@ -274,7 +289,7 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     /// Only fantasy patterns may be placed into pattern slots.
     private static class PatternSlotFilter implements IAEItemFilter {
         @Override
-        public boolean allowInsert(InternalInventory inv, int slot, net.minecraft.world.item.ItemStack stack) {
+        public boolean allowInsert(InternalInventory inv, int slot, ItemStack stack) {
             return stack.getItem() instanceof FantasyPatternItem;
         }
 

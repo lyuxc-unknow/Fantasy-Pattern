@@ -31,4 +31,18 @@ public interface IFantasyEncodingTerminalHost extends ITerminalHost {
 
     /// Records the tag ingredient slot {@code slot} was filled from; null makes it an exact ingredient again.
     void setInputTag(int slot, @Nullable ResourceLocation tag);
+
+    /// Whether ingredient slot {@code slot} ignores data components (NBT) when matched, so an exact key accepts any
+    /// variant with different data.
+    boolean getInputIgnore(int slot);
+
+    /// Sets whether ingredient slot {@code slot} ignores data components when matched.
+    void setInputIgnore(int slot, boolean ignore);
+
+    /// Whether result slot {@code slot} ignores data components. Carried for display and re-editing; results have no
+    /// matching step in this mod.
+    boolean getOutputIgnore(int slot);
+
+    /// Sets whether result slot {@code slot} ignores data components.
+    void setOutputIgnore(int slot, boolean ignore);
 }

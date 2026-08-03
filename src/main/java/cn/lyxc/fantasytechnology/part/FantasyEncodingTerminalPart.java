@@ -85,6 +85,12 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
     /// so replacing a tagged ingredient by hand automatically turns it back into an exact one.
     private final ResourceLocation[] inputTags = new ResourceLocation[INPUT_SLOTS];
 
+    /// Whether each ingredient slot ignores data components when matched (right-click toggled in the terminal).
+    private final boolean[] inputIgnore = new boolean[INPUT_SLOTS];
+
+    /// Whether each result slot ignores data components; display and re-editing only, results have no matching step.
+    private final boolean[] outputIgnore = new boolean[OUTPUT_SLOTS];
+
     public FantasyEncodingTerminalPart(IPartItem<?> partItem) {
         super(partItem);
     }
@@ -123,6 +129,28 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
     }
 
     @Override
+    public boolean getInputIgnore(int slot) {
+        return inputIgnore[slot];
+    }
+
+    @Override
+    public void setInputIgnore(int slot, boolean ignore) {
+        inputIgnore[slot] = ignore;
+        saveChanges();
+    }
+
+    @Override
+    public boolean getOutputIgnore(int slot) {
+        return outputIgnore[slot];
+    }
+
+    @Override
+    public void setOutputIgnore(int slot, boolean ignore) {
+        outputIgnore[slot] = ignore;
+        saveChanges();
+    }
+
+    @Override
     public MenuType<?> getMenuType(Player player) {
         return FantasyEncodingTermMenu.TYPE;
     }
@@ -151,6 +179,8 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
         encodedInputs.clear();
         encodedOutputs.clear();
         Arrays.fill(inputTags, null);
+        Arrays.fill(inputIgnore, false);
+        Arrays.fill(outputIgnore, false);
     }
 
     @Override
@@ -167,6 +197,17 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
             if (slot >= 0 && slot < inputTags.length) {
                 inputTags[slot] = ResourceLocation.tryParse(tags.getString(key));
             }
+        }
+        readBooleanArray(tag, "inputIgnore", inputIgnore);
+        readBooleanArray(tag, "outputIgnore", outputIgnore);
+    }
+
+    /// Fills {@code target} from a boolean array stored as NBT bytes; a missing or shorter entry leaves the rest
+    /// false, so a part saved before the flags existed simply reads as all-off.
+    private static void readBooleanArray(CompoundTag tag, String key, boolean[] target) {
+        byte[] loaded = tag.getByteArray(key);
+        for (int i = 0; i < target.length; i++) {
+            target[i] = i < loaded.length && loaded[i] != 0;
         }
     }
 
@@ -185,6 +226,22 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
         }
         if (!tags.isEmpty()) {
             tag.put("inputTags", tags);
+        }
+        writeBooleanArray(tag, "inputIgnore", inputIgnore);
+        writeBooleanArray(tag, "outputIgnore", outputIgnore);
+    }
+
+    /// Stores a boolean array as NBT bytes, skipping the key entirely while every flag is still off - which is the
+    /// normal case, and matches how the tags above are written.
+    private static void writeBooleanArray(CompoundTag tag, String key, boolean[] values) {
+        byte[] result = new byte[values.length];
+        boolean any = false;
+        for (int i = 0; i < values.length; i++) {
+            result[i] = (byte) (values[i] ? 1 : 0);
+            any |= values[i];
+        }
+        if (any) {
+            tag.putByteArray(key, result);
         }
     }
 
