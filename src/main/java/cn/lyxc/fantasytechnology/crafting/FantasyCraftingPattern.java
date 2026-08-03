@@ -112,7 +112,7 @@ public class FantasyCraftingPattern implements IPatternDetails {
     /// Decodes a fantasy pattern item key into pattern details, or null if it is not an encoded fantasy pattern.
     @Nullable
     public static FantasyCraftingPattern decode(AEItemKey what, Level level) {
-        if (!(what.getItem() instanceof FantasyPatternItem)) {
+        if (what == null || !(what.getItem() instanceof FantasyPatternItem)) {
             return null;
         }
         FantasyPatternData data = what.get(FTComponents.FANTASY_PATTERN_DATA.get());
