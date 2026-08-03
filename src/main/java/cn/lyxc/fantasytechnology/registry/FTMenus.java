@@ -5,6 +5,7 @@ import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -12,7 +13,7 @@ public final class FTMenus {
     private FTMenus() {
     }
 
-    public static final DeferredRegister<MenuType<?>> REGISTER = DeferredRegister.create(Registries.MENU,
+    private static final DeferredRegister<MenuType<?>> REGISTER = DeferredRegister.create(Registries.MENU,
             FantasyTechnology.MODID);
 
     /// The encoding terminal's menu type is created by AE2's MenuTypeBuilder (which also wires up the opener that
@@ -24,6 +25,7 @@ public final class FTMenus {
             .register("fantasy_annihilation", () -> FantasyAnnihilationMenu.TYPE);
 
     /// Forces class loading so the static registrations above run.
-    public static void init() {
+    public static void init(IEventBus bus) {
+        REGISTER.register(bus);
     }
 }

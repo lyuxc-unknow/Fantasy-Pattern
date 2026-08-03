@@ -1,6 +1,9 @@
 package cn.lyxc.fantasytechnology.item;
 
-import appeng.api.stacks.*;
+import appeng.api.stacks.AEFluidKey;
+import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.AEKey;
+import appeng.api.stacks.GenericStack;
 import cn.lyxc.fantasytechnology.integration.mekanism.MekanismCompat;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -13,6 +16,8 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.material.Fluid;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -118,7 +123,7 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
     private static List<AEKey> keysInTag(AEKey representative, ResourceLocation tagId) {
         List<AEKey> keys = new ArrayList<>();
         if (representative instanceof AEItemKey) {
-            for (Holder<net.minecraft.world.item.Item> holder : BuiltInRegistries.ITEM
+            for (Holder<Item> holder : BuiltInRegistries.ITEM
                     .getTagOrEmpty(TagKey.create(Registries.ITEM, tagId))) {
                 AEItemKey key = AEItemKey.of(holder.value());
                 if (key != null) {
@@ -126,7 +131,7 @@ public record PatternIngredient(GenericStack stack, Optional<ResourceLocation> t
                 }
             }
         } else if (representative instanceof AEFluidKey) {
-            for (Holder<net.minecraft.world.level.material.Fluid> holder : BuiltInRegistries.FLUID
+            for (Holder<Fluid> holder : BuiltInRegistries.FLUID
                     .getTagOrEmpty(TagKey.create(Registries.FLUID, tagId))) {
                 AEFluidKey key = AEFluidKey.of(holder.value());
                 if (key != null) {

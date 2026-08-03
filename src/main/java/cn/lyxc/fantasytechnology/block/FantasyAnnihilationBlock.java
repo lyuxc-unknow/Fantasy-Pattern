@@ -6,6 +6,7 @@ import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
 import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
 import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.Containers;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -68,7 +69,7 @@ public class FantasyAnnihilationBlock extends Block implements EntityBlock {
             for (int i = 0; i < annihilation.getInternalInventory().size(); i++) {
                 var stack = annihilation.getInternalInventory().getStackInSlot(i);
                 if (!stack.isEmpty()) {
-                    net.minecraft.world.Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
+                    Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
                 }
             }
         }

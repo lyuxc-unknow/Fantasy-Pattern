@@ -146,7 +146,7 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         // Queue the result instead of inserting it right now.
         //
         // The CPU only starts waiting for a pattern's outputs *after* pushPattern returns: executeCrafting calls us
-        // first and adds the expected outputs to its waitingFor list afterwards. Inserting here would therefore offer
+        // first and adds the expected outputs to its waitingFor list afterward. Inserting here would therefore offer
         // each result to a CPU that is not yet expecting it, so every insert would be matched against the previous
         // operation's expectation and the job would end up permanently one craft short.
         for (GenericStack output : pattern.getOutputs()) {

@@ -37,7 +37,7 @@ Fantasy Technology
 
 [[dependencies.fantasy_technology]]
     modId="jei"
-    type="optional"
+    type="required"
     versionRange="[19,)"
     ordering="AFTER"
     side="BOTH"
