@@ -2,8 +2,19 @@
   "required": true,
   "minVersion": "0.8.5",
   "package": "cn.lyxc.fantasytechnology.mixin",
+  "plugin": "cn.lyxc.fantasytechnology.mixin.FantasyTechnologyMixinPlugin",
   "compatibilityLevel": "JAVA_21",
+  "mixinextras": {
+    "minVersion": "0.5.3"
+  },
   "mixins": [
+    "AECraftingPatternInputMixin",
+    "CraftingCpuLogicMixin",
+    "CraftingTaskProgressAccessor",
+    "ExecutingCraftingJobAccessor",
+    "OmniCraftingCalculationMixin",
+    "OmniCraftingTreeNodeAccessor",
+    "OmniCraftingTreeProcessAccessor",
     "PatternProviderLogicMixin"
   ],
   "injectors": {

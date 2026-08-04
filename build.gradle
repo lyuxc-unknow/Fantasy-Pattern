@@ -147,6 +147,10 @@ dependencies {
     localRuntime "maven.modrinth:mystical-agriculture:8.0.27"
     localRuntime "maven.modrinth:neoecoae:21.1.1"
     localRuntime "maven.modrinth:ldlib:mc1.21.1-2.2.32-neoforge"
+    localRuntime "curse.maven:glodium-957920:5821676"
+    localRuntime "curse.maven:ex-pattern-provider-892005:8511901"
+    // OmniSequence-Transfinite: kept in dev runs to verify the coexistence gate (FantasyTechnologyMixinPlugin).
+    localRuntime "curse.maven:omnisequence-transfinite-1624558:8547199"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

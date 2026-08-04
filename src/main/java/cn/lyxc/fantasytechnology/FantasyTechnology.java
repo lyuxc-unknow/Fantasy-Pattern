@@ -5,6 +5,7 @@ import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.parts.PartModels;
 import appeng.blockentity.AEBaseBlockEntity;
 import cn.lyxc.fantasytechnology.crafting.FantasyPatternDecoder;
+import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.network.FTPackets;
 import cn.lyxc.fantasytechnology.part.FantasyEncodingTerminalPart;
 import cn.lyxc.fantasytechnology.registry.*;
@@ -14,6 +15,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
+import net.neoforged.fml.config.ModConfig;
 import org.slf4j.Logger;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
@@ -27,6 +29,9 @@ public class FantasyTechnology {
     // The constructor for the mod class is the first code that is run when your mod is loaded.
     // FML will recognize some parameter types like IEventBus or ModContainer and pass them in automatically.
     public FantasyTechnology(IEventBus modEventBus, ModContainer modContainer) {
+        // Server-side config for the aggregated crafting planner and batch dispatch (adapted from OmniSequence).
+        modContainer.registerConfig(ModConfig.Type.SERVER, FTConfig.SPEC);
+
         // Load registry classes so their static content gets registered.
         FTBlocks.init(modEventBus);
         FTItems.init(modEventBus);

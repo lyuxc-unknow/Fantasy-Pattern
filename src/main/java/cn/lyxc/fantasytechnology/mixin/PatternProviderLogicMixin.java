@@ -40,7 +40,7 @@ public abstract class PatternProviderLogicMixin {
 
     /// Neither blank nor encoded fantasy patterns belong in an AE2 pattern provider. Held as a singleton because
     /// {@link PatternProviderLogic} has two constructors and the injection below fires for each of them; setting the
-    /// same instance twice costs nothing.
+    /// same instance twice costs nothing, whereas a fresh filter per provider would not.
     @Unique
     private static final IAEItemFilter FANTASY_TECHNOLOGY$NO_FANTASY_PATTERNS = new IAEItemFilter() {
         @Override

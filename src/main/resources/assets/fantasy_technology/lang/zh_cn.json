@@ -12,5 +12,10 @@
   "gui.fantasy_technology.ignore_data_yes": "忽略数据标签：是（右键切换）",
   "gui.fantasy_technology.ignore_data_no": "忽略数据标签：否（右键切换）",
   "gui.fantasy_technology.transfer_unsupported": "该配方无法编码为幻梦样板",
-  "gui.fantasy_technology.fantasy_annihilation.title": "幻梦分子重构演算样板供应器"
+  "gui.fantasy_technology.fantasy_annihilation.title": "幻梦分子重构演算样板供应器",
+  "fantasy_technology.configuration.max_fast_mode": "配方树聚合规划器",
+  "fantasy_technology.configuration.max_fast_max_nodes": "聚合配方节点上限",
+  "fantasy_technology.configuration.max_fast_compile_budget_ms": "图编译时间预算（毫秒）",
+  "fantasy_technology.configuration.batch_dispatch_enabled": "向幻梦分子重构演算样板供应器批量发配",
+  "fantasy_technology.configuration.diagnostics": "记录规划器决策日志"
 }

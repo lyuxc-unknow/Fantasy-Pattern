@@ -21,6 +21,7 @@ import appeng.helpers.patternprovider.PatternContainer;
 import appeng.util.inv.AppEngInternalInventory;
 import appeng.util.inv.filter.IAEItemFilter;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
+import cn.lyxc.fantasytechnology.integration.ae2.IFantasyBatchCraftingProvider;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.registry.FTBlockEntities;
@@ -47,7 +48,7 @@ import java.util.Set;
 /// inserts the result into the network instantly - no intermediate process, and it never reports busy, so a single
 /// block executes as many crafting operations per tick as the CPU requests.
 public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
-        implements ICraftingProvider, PatternContainer, IGridTickable {
+        implements ICraftingProvider, PatternContainer, IGridTickable, IFantasyBatchCraftingProvider {
 
     public static final int PATTERN_SLOTS = 36;
 
@@ -64,6 +65,10 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     @Nullable
     private List<IPatternDetails> patternCache;
+
+    /// How many repetitions the next {@link #pushPattern} carries. Always 1 outside of a batch armed by the crafting
+    /// CPU; see {@link IFantasyBatchCraftingProvider}.
+    private long batchCrafts = 1;
 
     public FantasyAnnihilationBlockEntity(BlockPos pos, BlockState state) {
         this(FTBlockEntities.FANTASY_ANNIHILATION.get(), pos, state);
@@ -127,14 +132,29 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
             return false;
         }
 
+        // The crafting CPU may have armed a batch: inputHolder then carries `crafts` complete recipes and the CPU is
+        // waiting for that many results. Annihilation is instant either way, so the only thing that scales is how
+        // much comes out.
+        long crafts = batchCrafts;
+        List<GenericStack> outputs = pattern.getOutputs();
+        long[] scaledOutputs = new long[outputs.size()];
+        for (int i = 0; i < scaledOutputs.length; i++) {
+            long amount = outputs.get(i).amount();
+            if (crafts > 1 && amount > Long.MAX_VALUE / crafts) {
+                return false;
+            }
+            scaledOutputs[i] = amount * crafts;
+        }
+
         var storage = grid.getStorageService().getInventory();
         IActionSource source = IActionSource.ofMachine(this);
 
         // The network must have room for the full result, otherwise refuse and let the CPU retry later. Simulating
         // against pendingOutputs as well would be more precise, but the queue is drained every tick, so at worst we
         // accept one tick's worth of work more than storage can take and hold it until room appears.
-        for (GenericStack output : pattern.getOutputs()) {
-            if (storage.insert(output.what(), output.amount(), Actionable.SIMULATE, source) < output.amount()) {
+        for (int i = 0; i < scaledOutputs.length; i++) {
+            AEKey what = outputs.get(i).what();
+            if (storage.insert(what, scaledOutputs[i], Actionable.SIMULATE, source) < scaledOutputs[i]) {
                 return false;
             }
         }
@@ -143,6 +163,9 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         // extracted every input from the network before calling us and is already waiting for those remainders - a
         // crystal with one more point of damage, an empty bucket - so they have to come back or the job stalls. The
         // rest simply vanishes: emptying the counter is all it takes, since the network no longer holds it.
+        //
+        // Batches never carry remainders (a pattern with container items is not batchable in the first place), and
+        // the amounts below are the ones actually extracted, so no scaling is needed here.
         IPatternDetails.IInput[] patternInputs = pattern.getInputs();
         for (int i = 0; i < inputHolder.length; i++) {
             KeyCounter counter = inputHolder[i];
@@ -164,11 +187,34 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         // first and adds the expected outputs to its waitingFor list afterward. Inserting here would therefore offer
         // each result to a CPU that is not yet expecting it, so every insert would be matched against the previous
         // operation's expectation and the job would end up permanently one craft short.
-        for (GenericStack output : pattern.getOutputs()) {
-            pendingOutputs.add(output.what(), output.amount());
+        for (int i = 0; i < scaledOutputs.length; i++) {
+            pendingOutputs.add(outputs.get(i).what(), scaledOutputs[i]);
         }
         getMainNode().ifPresent((g, node) -> g.getTickManager().alertDevice(node));
         return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // IFantasyBatchCraftingProvider: several recipes per push
+    // ------------------------------------------------------------------------
+
+    /// Annihilation has no internal capacity and never reports busy, so any number of repetitions is acceptable; the
+    /// crafting CPU's own operation budget is what actually sizes a batch.
+    @Override
+    public long fantasyTechnology$batchLimit(IPatternDetails patternDetails) {
+        return patternDetails instanceof FantasyCraftingPattern && getMainNode().getGrid() != null
+                ? Long.MAX_VALUE
+                : 0;
+    }
+
+    @Override
+    public void fantasyTechnology$beginBatch(long crafts) {
+        batchCrafts = Math.max(1, crafts);
+    }
+
+    @Override
+    public void fantasyTechnology$endBatch() {
+        batchCrafts = 1;
     }
 
     /// Pushes queued results into the network. Runs on the tick after the craft was pushed, by which point the

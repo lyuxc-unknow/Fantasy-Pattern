@@ -12,5 +12,10 @@
   "gui.fantasy_technology.ignore_data_yes": "Ignore data: Yes (right-click to toggle)",
   "gui.fantasy_technology.ignore_data_no": "Ignore data: No (right-click to toggle)",
   "gui.fantasy_technology.transfer_unsupported": "This recipe cannot be encoded into a fantasy pattern",
-  "gui.fantasy_technology.fantasy_annihilation.title": "FMR Pattern Provider"
+  "gui.fantasy_technology.fantasy_annihilation.title": "FMR Pattern Provider",
+  "fantasy_technology.configuration.max_fast_mode": "Aggregated crafting planner",
+  "fantasy_technology.configuration.max_fast_max_nodes": "Maximum aggregated recipe nodes",
+  "fantasy_technology.configuration.max_fast_compile_budget_ms": "Graph compilation budget (ms)",
+  "fantasy_technology.configuration.batch_dispatch_enabled": "Batch dispatch to the FMR Pattern Provider",
+  "fantasy_technology.configuration.diagnostics": "Log planner decisions"
 }
