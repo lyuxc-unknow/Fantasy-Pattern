@@ -7,16 +7,14 @@ accessors it reads through), the batch-dispatch integration (crafting CPU
 extraction and push acceleration) and the `getRemainingKey`/`isValid` caches in
 this project are adapted from
 [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite),
-Copyright (c) 2025 AyaYumi.
+licensed under the **MIT License**.
 
-The original project is licensed under the **MIT License**. This project is
-likewise MIT-licensed and redistributes the adapted portions under the same
-terms. The MIT License text:
+Every adapted source file embeds the full MIT License text in its header:
 
 ```
 MIT License
 
-Copyright (c) 2025 AyaYumi
+Copyright (c) 2026 HibikiShino and OmniSequence: Transfinite contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -37,4 +35,4 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-Each adapted source file carries a short header pointing to this notice.
+This project is distributed under the same MIT License.
