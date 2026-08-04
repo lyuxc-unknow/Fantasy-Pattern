@@ -11,6 +11,7 @@ import appeng.util.ConfigInventory;
 import appeng.util.inv.AppEngInternalInventory;
 import appeng.util.inv.filter.IAEItemFilter;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.item.FantasyBlankPatternItem;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
@@ -245,15 +246,16 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
         }
     }
 
-    /// The blank pattern slot only takes unencoded fantasy patterns; the encoded slot only takes encoded ones, which
-    /// the menu then decodes back into the grid so the recipe can be edited.
+    /// The blank pattern slot only takes blank fantasy patterns; the encoded slot only takes encoded recombination
+    /// patterns, which the menu then decodes back into the grid so the recipe can be edited.
     private static class PatternSlotFilter implements IAEItemFilter {
         @Override
         public boolean allowInsert(InternalInventory inv, int slot, ItemStack stack) {
-            if (!(stack.getItem() instanceof FantasyPatternItem)) {
-                return false;
-            }
-            return (slot == BLANK_PATTERN_SLOT) != FantasyPatternItem.isEncoded(stack);
+            return switch (slot) {
+                case BLANK_PATTERN_SLOT -> stack.getItem() instanceof FantasyBlankPatternItem;
+                case ENCODED_PATTERN_SLOT -> FantasyPatternItem.isEncoded(stack);
+                default -> false;
+            };
         }
 
         @Override

@@ -21,6 +21,7 @@ public class FTCreativeTab {
                 .title(Component.translatable("itemGroup.fantasy_technology"))
                 .icon(() -> FTItems.FANTASY_PATTERN.get().getDefaultInstance())
                 .displayItems((parameters, output) -> {
+                    output.accept(FTItems.FANTASY_BLANK_PATTERN.get());
                     output.accept(FTItems.FANTASY_PATTERN.get());
                     output.accept(FTItems.FANTASY_ENCODING_TERMINAL.get());
                     output.accept(FTBlocks.FANTASY_ANNIHILATION.get());

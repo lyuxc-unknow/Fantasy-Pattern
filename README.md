@@ -1,16 +1,17 @@
 # AE: 幻梦编码
 
-**Fantasy Technology** (AE: 幻梦编码) adds a compact, ME-native crafting pipeline to Applied Energistics 2 for NeoForge 1.21.1: a *Fantasy Pattern* (幻梦样板) that stores a processing recipe as data, a *Fantasy Encoding Terminal* (幻梦编码终端) to create those patterns straight from your recipe viewer, and a *Fantasy Molecular Reconfiguration Pattern Provider* (幻梦分子重构演算样板供应器) block that executes them instantly — consuming the ingredients from your ME network and injecting the results back, with no intermediate machine in between.
+**Fantasy Technology** (AE: 幻梦编码) adds a compact, ME-native crafting pipeline to Applied Energistics 2 for NeoForge 1.21.1: a *Blank Fantasy Pattern* (空白幻梦样板) that the *Fantasy Encoding Terminal* (幻梦编码终端) turns into a *Fantasy Recombination Pattern* (幻梦重组样板) storing a processing recipe as data, and a *Fantasy Molecular Reconfiguration Pattern Provider* (幻梦分子重构演算样板供应器) block that executes them instantly — consuming the ingredients from your ME network and injecting the results back, with no intermediate machine in between.
 
 ---
 
 ## Features
 
-### 🧩 Fantasy Pattern
-- Encodes a processing recipe into a single item: up to **81 ingredient entries** and **6 results**, items, fluids and (with Mekanism) chemicals alike.
+### 🧩 Fantasy Recombination Pattern
+- Blank fantasy patterns (`ae2:blank_pattern` + amethyst shard) are consumed by the encoding terminal; the encoded recombination pattern carries the recipe as data: up to **81 ingredient entries** and **6 results**, items, fluids and (with Mekanism) chemicals alike.
 - Ingredient slots can be tag-based: a bookshelf pattern asks for any plank (`#minecraft:planks`) instead of one specific wood, so the crafting planner picks whatever your network actually has.
 - Same-kind entries merge on encoding — six planks + three books encode as one `6x planks` + one `3x book` entry.
 - Patterns are fully persistent: crafting jobs survive world reloads.
+- Fantasy patterns (blank or encoded) cannot be placed into AE2's own pattern providers — they only run in the Fantasy Molecular Reconfiguration Pattern Provider.
 
 ### 🖥️ Fantasy Encoding Terminal
 - An ME terminal part (attach it to your network like any terminal) with the full network item list on the side.
@@ -40,10 +41,10 @@ Without Mekanism/Applied Mekanistics the mod runs fine; chemical slots simply ar
 
 ## Usage
 
-1. **Craft a Fantasy Pattern** and place it (blank) in the Fantasy Encoding Terminal.
+1. **Craft a Blank Fantasy Pattern** (`ae2:blank_pattern` + amethyst shard) and place it in the Fantasy Encoding Terminal.
 2. Open a recipe in JEI and press the transfer button (the `+`) — inputs and results are filled in, tags and amounts preserved.
 3. Optionally press the **double button** next to the results to scale the recipe up.
-4. Press **Encode** — the blank pattern becomes an encoded Fantasy Pattern.
+4. Press **Encode** — the blank fantasy pattern becomes an encoded Fantasy Recombination Pattern.
 5. Place encoded patterns in a **Fantasy Molecular Reconfiguration Pattern Provider** block connected to your ME network. Request the pattern's output from any terminal: the block consumes the ingredients and produces the result instantly.
 
 **Tip:** hovering an encoded pattern in your inventory shows its full recipe (ingredients and results) in the tooltip.

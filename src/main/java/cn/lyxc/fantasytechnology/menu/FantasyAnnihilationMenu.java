@@ -1,14 +1,17 @@
 package cn.lyxc.fantasytechnology.menu;
 
+import appeng.api.inventories.InternalInventory;
 import appeng.menu.AEBaseMenu;
 import appeng.menu.SlotSemantics;
 import appeng.menu.implementations.MenuTypeBuilder;
 import appeng.menu.slot.AppEngSlot;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
+import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.item.ItemStack;
 
 
 /// Menu of the fantasy annihilation block, in the style of AE2's own machine menus (see {@code SkyChestMenu}).
@@ -26,9 +29,32 @@ public class FantasyAnnihilationMenu extends AEBaseMenu {
 
         var patternInv = annihilation.getPatternInv();
         for (int i = 0; i < patternInv.size(); i++) {
-            addSlot(new AppEngSlot(patternInv, i), SlotSemantics.ENCODED_PATTERN);
+            addSlot(new PatternDisplaySlot(patternInv, i), SlotSemantics.ENCODED_PATTERN);
         }
 
         createPlayerInventorySlots(playerInventory);
+    }
+
+    /// Shows the first output of an encoded fantasy pattern instead of the pattern item itself, like AE2's own
+    /// pattern provider slots do for their encoded patterns.
+    private static class PatternDisplaySlot extends AppEngSlot {
+
+        PatternDisplaySlot(InternalInventory inv, int index) {
+            super(inv, index);
+        }
+
+        @Override
+        public ItemStack getDisplayStack() {
+            ItemStack stack = super.getDisplayStack();
+            // Client only, as in AE2's own pattern slot: the substitute is purely cosmetic, and the cache behind
+            // getOutput is an unsynchronised WeakHashMap that the server thread has no business touching.
+            if (isRemote() && stack.getItem() instanceof FantasyPatternItem) {
+                ItemStack output = FantasyPatternItem.getOutput(stack);
+                if (!output.isEmpty()) {
+                    return output;
+                }
+            }
+            return stack;
+        }
     }
 }

@@ -11,6 +11,7 @@ import appeng.menu.slot.AppEngSlot;
 import appeng.menu.slot.FakeSlot;
 import appeng.util.ConfigInventory;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.item.FantasyBlankPatternItem;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
@@ -208,15 +209,20 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     }
 
     /// Shift-clicking a fantasy pattern in the player inventory should fill the pattern slots first, not the ME network
-    /// storage. Unencoded patterns go into the blank pattern slot, encoded ones into the encoded pattern slot; whatever
-    /// does not fit falls back to the network like any other item.
+    /// storage. Blank fantasy patterns go into the blank pattern slot, encoded recombination patterns into the encoded
+    /// pattern slot; whatever does not fit falls back to the network like any other item.
     ///
     /// Note: {@link Slot#safeInsert} modifies and returns the passed stack, so a copy is inserted and the original
     /// {@code input} is kept intact for the placed-amount calculation and the fallback to the network.
     @Override
     protected int transferStackToMenu(ItemStack input) {
-        if (input.getItem() instanceof FantasyPatternItem) {
-            AppEngSlot target = FantasyPatternItem.isEncoded(input) ? encodedPatternSlot : blankPatternSlot;
+        AppEngSlot target = null;
+        if (input.getItem() instanceof FantasyBlankPatternItem) {
+            target = blankPatternSlot;
+        } else if (FantasyPatternItem.isEncoded(input)) {
+            target = encodedPatternSlot;
+        }
+        if (target != null) {
             ItemStack remainder = target.safeInsert(input.copy());
             int placed = input.getCount() - remainder.getCount();
             if (placed > 0) {
@@ -255,16 +261,16 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
         ItemStack existing = encodedPatternSlot.getItem().copy();
         if (existing.isEmpty()) {
-            // Re-encoding in place is only possible with a blank pattern to consume.
+            // Re-encoding in place is only possible with a blank fantasy pattern to consume.
             ItemStack blank = blankPatternSlot.getItem().copy();
-            if (blank.isEmpty() || !(blank.getItem() instanceof FantasyPatternItem)) {
+            if (blank.isEmpty() || !(blank.getItem() instanceof FantasyBlankPatternItem)) {
                 return;
             }
             blank.shrink(1);
             blankPatternSlot.set(blank);
             encodedPatternSlot.set(encoded);
-        } else if (existing.getCount() == 1 && existing.getItem() instanceof FantasyPatternItem) {
-            // Overwrite the pattern that is already sitting in the slot, no blank needed.
+        } else if (existing.getCount() == 1 && FantasyPatternItem.isEncoded(existing)) {
+            // Overwrite the recombination pattern that is already sitting in the slot, no blank needed.
             encodedPatternSlot.set(encoded);
         } else {
             return;
@@ -451,7 +457,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         }
     }
 
-    /// Takes unencoded fantasy patterns, which encoding consumes.
+    /// Takes blank fantasy patterns, which encoding consumes.
     private static class BlankPatternSlot extends AppEngSlot {
         BlankPatternSlot(InternalInventory inv) {
             super(inv, FantasyEncodingTerminalPart.BLANK_PATTERN_SLOT);
@@ -459,13 +465,12 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
         @Override
         public boolean mayPlace(ItemStack stack) {
-            return stack.getItem() instanceof FantasyPatternItem && !FantasyPatternItem.isEncoded(stack)
-                    && super.mayPlace(stack);
+            return stack.getItem() instanceof FantasyBlankPatternItem && super.mayPlace(stack);
         }
     }
 
-    /// Holds the encoded pattern. Encoded patterns may also be placed here by hand, which loads their contents back
-    /// into the terminal so the recipe can be edited and written back.
+    /// Holds the encoded recombination pattern. Encoded patterns may also be placed here by hand, which loads their
+    /// contents back into the terminal so the recipe can be edited and written back.
     private static class EncodedPatternSlot extends AppEngSlot {
 
         EncodedPatternSlot(InternalInventory inv) {

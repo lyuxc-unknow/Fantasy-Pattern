@@ -1,7 +1,8 @@
 {
   "itemGroup.fantasy_technology": "Fantasy Pattern",
-  "item.fantasy_technology.fantasy_pattern": "Fantasy Pattern",
-  "item.fantasy_technology.fantasy_pattern.empty": "Not encoded",
+  "item.fantasy_technology.fantasy_blank_pattern": "Blank Fantasy Pattern",
+  "item.fantasy_technology.fantasy_pattern": "Fantasy Recombination Pattern",
+  "item.fantasy_technology.fantasy_pattern.invalid": "Invalid Encoding",
   "item.fantasy_technology.fantasy_pattern.outputs": "Produces:",
   "item.fantasy_technology.fantasy_pattern.ingredients": "Ingredients:",
   "item.fantasy_technology.fantasy_encoding_terminal": "Fantasy Encoding Terminal",

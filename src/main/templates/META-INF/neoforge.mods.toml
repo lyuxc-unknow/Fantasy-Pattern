@@ -6,6 +6,16 @@ license="${mod_license}"
 [[accessTransformers]]
     file="META-INF/accesstransformer.cfg"
 
+# Keeps fantasy patterns out of AE2's own pattern providers. Functional, so its config is required: if it stops
+# applying, patterns could end up somewhere that would execute them wrongly.
+[[mixins]]
+    config="fantasy_technology.mixins.json"
+
+# Cosmetic only - showing a pattern's first output in pattern slots and while shift is held. Declared optional so an
+# AE2 update that moves these internals costs the icons, not the whole game.
+[[mixins]]
+    config="fantasy_technology.client.mixins.json"
+
 [[mods]] #mandatory
 modId="fantasy_technology" #mandatory
 version="${mod_version}" #mandatory

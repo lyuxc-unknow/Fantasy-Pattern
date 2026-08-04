@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "minVersion": "0.8.5",
+  "package": "cn.lyxc.fantasytechnology.mixin.client",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "GuiGraphicsHooksMixin",
+    "PatternSlotMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

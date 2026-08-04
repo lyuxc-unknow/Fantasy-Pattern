@@ -1,7 +1,8 @@
 {
   "itemGroup.fantasy_technology": "幻梦编码",
-  "item.fantasy_technology.fantasy_pattern": "幻梦样板",
-  "item.fantasy_technology.fantasy_pattern.empty": "未编码",
+  "item.fantasy_technology.fantasy_blank_pattern": "空白幻梦样板",
+  "item.fantasy_technology.fantasy_pattern": "幻梦重组样板",
+  "item.fantasy_technology.fantasy_pattern.invalid": "无效编码",
   "item.fantasy_technology.fantasy_pattern.outputs": "产物:",
   "item.fantasy_technology.fantasy_pattern.ingredients": "原料:",
   "item.fantasy_technology.fantasy_encoding_terminal": "幻梦编码终端",
