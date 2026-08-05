@@ -120,7 +120,6 @@ dependencies {
     // Applied Mekanistics bridges mekanism chemicals into AE2's key system; both it and mekanism are optional
     compileOnly "maven.modrinth:applied-mekanistics:${applied_mekanistics_version}"
     localRuntime "maven.modrinth:applied-mekanistics:${applied_mekanistics_version}"
-    localRuntime "com.atir.molecularmanipulator:omnisequence-transfinite:1.3.9"
     // GuideME is a required dependency of AE2 and must be present in dev runs
     localRuntime "org.appliedenergistics:guideme:${guideme_version}"
 
@@ -151,6 +150,7 @@ dependencies {
     localRuntime "maven.modrinth:ldlib:mc1.21.1-2.2.32-neoforge"
     localRuntime "curse.maven:glodium-957920:5821676"
     localRuntime "curse.maven:ex-pattern-provider-892005:8511901"
+    localRuntime "com.atir.molecularmanipulator:omnisequence-transfinite:1.3.9"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
