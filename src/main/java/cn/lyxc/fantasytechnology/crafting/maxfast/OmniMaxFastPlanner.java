@@ -270,6 +270,13 @@ public final class OmniMaxFastPlanner {
             }
 
             long patternTimes = ceilDiv(totalRequestedItems, node.outputPerPattern);
+            // The tool is worn, not consumed, so it is reserved from the pool once for the whole aggregated run
+            // rather than flowing through the child edges below.
+            if (node.damageInput != null && !allocateDeterministicDamageInput(
+                    inventory, node.damageInput.input, node.damageInput.child,
+                    node.damageInput.multiplier, patternTimes, pauseCheckpoint)) {
+                throw new Fallback("insufficient_deterministic_damage_capacity");
+            }
             for (Edge edge : node.edges) {
                 long childRequests = checkedMultiply(edge.requestMultiplier, patternTimes,
                         "child_request_overflow");
@@ -303,6 +310,11 @@ public final class OmniMaxFastPlanner {
         Node node = graph.nodes.get(nodeIndex);
         if (node.barrier) {
             throw new Fallback("transactional_barrier:" + node.barrierReason);
+        }
+        if (node.damageInput != null) {
+            // The transactional path replays inputs one node at a time; the tool pool is only accounted for in the
+            // aggregated pass, so a node that spends one has no safe reading here.
+            throw new Fallback("transactional_damage_input");
         }
         validateTemplates(node, inventory, pauseCheckpoint);
 
@@ -952,13 +964,15 @@ public final class OmniMaxFastPlanner {
                 } catch (Barrier barrier) {
                     node.barrier = true;
                     node.barrierReason = barrier.reason;
+                    if (FTConfig.DIAGNOSTICS.get()) {
+                        // A boundary hands its whole subtree back to AE2, so this line is the first thing to look
+                        // at when a plan is unexpectedly slow.
+                        FantasyTechnology.LOGGER.info(
+                                "Omni MAX_FAST boundary: key={}, amount={}, barrier={}, pattern={}",
+                                node.key, node.amount, node.barrierReason,
+                                describePattern(node.details));
+                    }
                     if (requiresImmediateFallback(barrier.reason)) {
-                        if (FTConfig.DIAGNOSTICS.get()) {
-                            FantasyTechnology.LOGGER.info(
-                                    "Omni MAX_FAST compile-time fallback: key={}, amount={}, barrier={}, pattern={}",
-                                    node.key, node.amount, node.barrierReason,
-                                    describePattern(node.details));
-                        }
                         throw new Fallback("unsafe_pattern_boundary:" + barrier.reason);
                     }
                 }
@@ -997,10 +1011,10 @@ public final class OmniMaxFastPlanner {
         private void validateReusableGraphConflicts()
                 throws Fallback, InterruptedException {
             for (Node owner : nodes) {
-                if (!owner.reachable || owner.reusableInputs.isEmpty()) {
+                if (!owner.reachable) {
                     continue;
                 }
-                for (GraphReusableInput reusableInput : owner.reusableInputs) {
+                for (GraphReusableInput reusableInput : owner.reusableGraphInputs()) {
                     for (Node graphNode : nodes) {
                         if (!graphNode.reachable) {
                             continue;
@@ -1167,7 +1181,20 @@ public final class OmniMaxFastPlanner {
                         throw new Barrier("unsupported_reusable_input");
                     }
                     if (inputMode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
-                        throw new Barrier("recursive_durability_input");
+                        // Keep the node in the graph rather than making it a boundary. A boundary hands its whole
+                        // subtree back to AE2, and AE2 plans any process holding container items one craft at a
+                        // time - so a tier chain that spends a tool at every level (essence upgrades and the like)
+                        // costs requested x branching^depth requests instead of one pass over the unique nodes.
+                        // The tool itself is still reserved separately, because it is worn rather than consumed.
+                        if (multiplier != 1) {
+                            throw new Barrier("unsupported_damage_input_multiplier");
+                        }
+                        if (node.damageInput != null) {
+                            throw new Barrier("multiple_damage_inputs");
+                        }
+                        node.damageInput = new GraphReusableInput(
+                                input, childBridge, inputMode, multiplier);
+                        continue;
                     }
                     var reusableInput = new GraphReusableInput(
                             input, childBridge, inputMode, multiplier);
@@ -1189,7 +1216,7 @@ public final class OmniMaxFastPlanner {
                     accumulator.occurrences++;
                 }
             }
-            if (hasContainerItems && node.reusableInputs.isEmpty()) {
+            if (hasContainerItems && node.reusableInputs.isEmpty() && node.damageInput == null) {
                 throw new Barrier("container_flag_without_supported_input");
             }
 
@@ -1384,6 +1411,9 @@ public final class OmniMaxFastPlanner {
         private final List<Edge> edges = new ArrayList<>();
         private final List<GraphReusableInput> reusableInputs = new ArrayList<>();
         private final List<OrderedGraphInput> orderedInputs = new ArrayList<>();
+        /// The one wearing-tool input this pattern spends, if any. Kept out of {@link #orderedInputs} because it is
+        /// reserved from the tool pool rather than requested like an ingredient.
+        private GraphReusableInput damageInput;
         private int indegree;
         private boolean emitter;
         private boolean terminal;
@@ -1398,6 +1428,19 @@ public final class OmniMaxFastPlanner {
             this.key = key;
             this.amount = amount;
             this.level = level;
+        }
+
+        /// Every reusable input this node holds - leased invariants and the worn tool alike. Both kinds have to be
+        /// checked against the rest of the graph: aggregating an ordinary node changes how much of its key is
+        /// visible to a slot that only borrows one.
+        private List<GraphReusableInput> reusableGraphInputs() {
+            if (damageInput == null) {
+                return reusableInputs;
+            }
+            var all = new ArrayList<GraphReusableInput>(reusableInputs.size() + 1);
+            all.addAll(reusableInputs);
+            all.add(damageInput);
+            return all;
         }
     }
 
