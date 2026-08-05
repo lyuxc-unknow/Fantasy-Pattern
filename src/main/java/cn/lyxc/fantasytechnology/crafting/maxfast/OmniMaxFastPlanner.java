@@ -1026,8 +1026,6 @@ public final class OmniMaxFastPlanner {
                                     reusableInput.child.fantasytechnology$getLevel())) {
                                 throw new Fallback("reusable_candidate_graph_conflict");
                             }
-                        } catch (Fallback fallback) {
-                            throw fallback;
                         } catch (RuntimeException exception) {
                             throw new Fallback("reusable_candidate_validation_error");
                         }

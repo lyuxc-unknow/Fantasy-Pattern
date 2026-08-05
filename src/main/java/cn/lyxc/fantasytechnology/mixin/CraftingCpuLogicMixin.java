@@ -247,11 +247,11 @@ public abstract class CraftingCpuLogicMixin {
         // The provider that gets the push has to be the one the batch was sized against. If AE2 reached a different
         // one, refuse rather than hand an N-fold recipe to something that only promised to take a single craft; AE2
         // reinjects the whole holder and retries next tick.
-        if (IFantasyBatchCraftingProvider.batchLimitOf(provider, patternDetails) < crafts) {
+        if (!(provider instanceof IFantasyBatchCraftingProvider batchProvider)
+                || batchProvider.fantasyTechnology$batchLimit(patternDetails) < crafts) {
             return false;
         }
 
-        var batchProvider = (IFantasyBatchCraftingProvider) provider;
         var task = fantasyTechnology$findTask(patternDetails);
         if (task == null) {
             return false;

@@ -30,6 +30,11 @@ import appeng.api.networking.crafting.ICraftingProvider;
 /// Opt-in capability for crafting providers that can execute a pattern several times from a single
 /// {@link ICraftingProvider#pushPattern} call.
 ///
+/// It extends {@link ICraftingProvider} rather than standing alongside it: batching is a property of how a provider
+/// receives a push, so only something that receives pushes can have it. That also keeps the crafting CPU's narrowing
+/// honest - once a provider is known to be batch-capable it is still, statically, the same crafting provider AE2
+/// handed over.
+///
 /// The crafting CPU hands such a provider one input holder carrying {@code N} complete recipes and tells it, out of
 /// band, how many recipes that is. Implementing this is a promise about three things at once:
 ///
@@ -41,7 +46,7 @@ import appeng.api.networking.crafting.ICraftingProvider;
 ///
 /// Providers that queue leftovers instead of refusing (AE2's own pattern provider, for instance) must not implement
 /// this interface.
-public interface IFantasyBatchCraftingProvider {
+public interface IFantasyBatchCraftingProvider extends ICraftingProvider {
 
     /// How many repetitions of {@code patternDetails} this provider will accept in one push. {@code 0} or {@code 1}
     /// means the pattern is dispatched one craft at a time, exactly as AE2 does by default.
