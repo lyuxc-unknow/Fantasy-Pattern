@@ -21,6 +21,7 @@ import appeng.helpers.patternprovider.PatternContainer;
 import appeng.util.inv.AppEngInternalInventory;
 import appeng.util.inv.filter.IAEItemFilter;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
+import cn.lyxc.fantasytechnology.crafting.MolecularReusableInputAdapters;
 import cn.lyxc.fantasytechnology.integration.ae2.IFantasyBatchCraftingProvider;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
@@ -164,15 +165,18 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         // crystal with one more point of damage, an empty bucket - so they have to come back or the job stalls. The
         // rest simply vanishes: emptying the counter is all it takes, since the network no longer holds it.
         //
-        // Batches never carry remainders (a pattern with container items is not batchable in the first place), and
-        // the amounts below are the ones actually extracted, so no scaling is needed here.
+        // A batch with container items carries a single reusable item (one crystal, one bucket, one damaged tool)
+        // that serves all `crafts` repetitions: it is not multiplied in the holder, and the CPU waits for exactly
+        // one worn-down result. Walking the wear chain through the same helper the batch plan used is what makes
+        // the two agree - a job waiting for a key that never comes back never finishes.
         IPatternDetails.IInput[] patternInputs = pattern.getInputs();
         for (int i = 0; i < inputHolder.length; i++) {
             KeyCounter counter = inputHolder[i];
             if (i < patternInputs.length) {
                 IPatternDetails.IInput input = patternInputs[i];
                 for (var entry : counter) {
-                    AEKey remaining = input.getRemainingKey(entry.getKey());
+                    AEKey remaining = MolecularReusableInputAdapters.wearDownBy(input, entry.getKey(), crafts);
+                    // A null key means the item was used up along the way; nothing comes back for it.
                     if (remaining != null) {
                         pendingOutputs.add(remaining, entry.getLongValue());
                     }

@@ -1,8 +1,25 @@
 /*
- * Portions of this file are adapted from OmniSequence-Transfinite
- * (https://github.com/AyaYumi/OmniSequence-Transfinite),
- * Copyright (c) 2025 AyaYumi, licensed under the MIT License.
- * See THIRD_PARTY_NOTICES.md in the project root for the full license text.
+ * MIT License
+ *
+ * Copyright (c) 2026 HibikiShino and OmniSequence: Transfinite contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 package cn.lyxc.fantasytechnology.crafting.maxfast;
@@ -10,6 +27,7 @@ package cn.lyxc.fantasytechnology.crafting.maxfast;
 import appeng.api.config.Actionable;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.stacks.AEKey;
+import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.CraftBranchFailure;
 import appeng.crafting.CraftingTreeNode;
@@ -19,80 +37,54 @@ import appeng.crafting.inv.ChildCraftingSimulationState;
 import appeng.crafting.inv.CraftingSimulationState;
 import appeng.crafting.pattern.AECraftingPattern;
 import appeng.crafting.pattern.AEProcessingPattern;
+import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.config.FTConfig;
-import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
+import cn.lyxc.fantasytechnology.crafting.MolecularReusableInputAdapters;
 import cn.lyxc.fantasytechnology.integration.ae2.OmniCraftingTreeNodeBridge;
 import cn.lyxc.fantasytechnology.integration.ae2.OmniCraftingTreeProcessBridge;
-import it.unimi.dsi.fastutil.ints.Int2ObjectLinkedOpenHashMap;
-import it.unimi.dsi.fastutil.ints.IntArrayFIFOQueue;
-import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
-import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
-import net.minecraft.world.level.Level;
-import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 
-/// Replaces AE2's recursive recipe-tree walk with one linear pass over a deduplicated graph.
-///
-/// AE2 requests a node once per position it occupies in the tree, so a chain like Mystical Agriculture's essence
-/// tiers is walked an exponential number of times. Here every distinct `(key, amount)` becomes a single graph node,
-/// the requests flowing into it are summed, and the graph is executed in topological order - each recipe is
-/// evaluated exactly once no matter how many parents ask for it.
-///
-/// The compiler only keeps a node if it can prove the aggregate is equivalent to AE2's walk. Anything else becomes a
-/// *boundary*: that node is handed back to AE2's own `request` at execution time, so a single awkward recipe costs
-/// its subtree rather than the whole plan. Some findings are fatal to the aggregate as a whole and fall back before
-/// anything at all has been delegated - that ordering matters, because AE2's `request` records missing items and
-/// disables branches on the calculation object itself, and those effects would be counted twice if the plan were
-/// re-run from scratch afterwards.
 public final class OmniMaxFastPlanner {
-
     private OmniMaxFastPlanner() {
     }
 
-    /// The parts of the surrounding {@code CraftingCalculation} the planner has to reach: its cooperative pause
-    /// checkpoint, whether this attempt is the final simulating one, and the missing-item list a node that cannot be
-    /// satisfied has to be recorded in.
-    ///
-    /// The implementation is mixed into AE2's own class, so the names carry this mod's prefix - a plain `pause()`
-    /// merged into a public AE2 class is exactly the kind of thing two addons collide on.
-    public interface CalculationBridge {
-
-        void fantasyTechnology$pause() throws InterruptedException;
-
-        boolean fantasyTechnology$simulating();
-
-        KeyCounter fantasyTechnology$missingItems();
+    @FunctionalInterface
+    public interface PauseCheckpoint {
+        void pause() throws InterruptedException;
     }
 
-    /// One calculation's worth of state. AE2 may run several attempts against the same tree (the full amount first,
-    /// then a binary search for a smaller one), so the compiled graph is built once and reused; a structural failure
-    /// is remembered too, so a hopeless tree is not recompiled on every attempt.
     public static final class Session {
-
         private final int maxNodes;
         private final long compileBudgetNanos;
-        private final CalculationBridge bridge;
-
+        private final PauseCheckpoint pauseCheckpoint;
         private CraftingTreeNode root;
         private Graph graph;
         private String structuralFailure;
+        private String transactionalRuntimeFailure;
         private Throwable structuralError;
         private long compileNanos;
 
-        public Session(int maxNodes, int compileBudgetMillis, CalculationBridge bridge) {
+        public Session(int maxNodes, int compileBudgetMillis,
+                PauseCheckpoint pauseCheckpoint) {
             this.maxNodes = maxNodes;
             this.compileBudgetNanos = TimeUnit.MILLISECONDS.toNanos(compileBudgetMillis);
-            this.bridge = bridge;
+            this.pauseCheckpoint = pauseCheckpoint;
         }
 
         public Result tryExecute(CraftingTreeNode requestedRoot, CraftingSimulationState inventory,
-                long requestedAmount) throws InterruptedException {
+                long requestedAmount, boolean simulation, KeyCounter missingItems)
+                throws InterruptedException {
             if (requestedAmount <= 0) {
                 return Result.fallback("invalid_request_amount", 0, 0, 0, 0, 0, null);
             }
@@ -101,120 +93,150 @@ public final class OmniMaxFastPlanner {
             }
             root = requestedRoot;
 
+            if (transactionalRuntimeFailure != null) {
+                return Result.fallback(transactionalRuntimeFailure, 0, 0,
+                        0, compileNanos, 0, null);
+            }
+
             if (graph == null && structuralFailure == null) {
-                compile(requestedRoot);
-            }
-            if (graph == null) {
-                return Result.fallback(structuralFailure, 0, 0, 0, compileNanos, 0, structuralError);
-            }
-
-            // Nothing below is supposed to delegate to AE2 before it has committed to the aggregate, but the
-            // snapshot makes that a guarantee rather than an argument: a fallback restores the missing-item list to
-            // whatever it was, so re-running the tree cannot double-count anything.
-            var missing = bridge.fantasyTechnology$missingItems();
-            var missingSnapshot = new KeyCounter();
-            missingSnapshot.addAll(missing);
-
-            long startedAt = System.nanoTime();
-            boolean applied = false;
-            try {
-                execute(graph, inventory, requestedAmount, bridge);
-                applied = true;
-                return Result.applied(graph.nodes().size(), graph.mergedOccurrences(), graph.barrierCount(),
-                        countLogicalNodes(graph), compileNanos, System.nanoTime() - startedAt);
-            } catch (CraftBranchFailure failure) {
-                return Result.branchFailure(graph.nodes().size(), graph.mergedOccurrences(), graph.barrierCount(),
-                        compileNanos, System.nanoTime() - startedAt, failure);
-            } catch (Fallback fallback) {
-                return Result.fallback(fallback.reason, graph.nodes().size(), graph.mergedOccurrences(),
-                        graph.barrierCount(), compileNanos, System.nanoTime() - startedAt, null);
-            } catch (RuntimeException exception) {
-                return Result.fallback("internal_execution_exception", graph.nodes().size(),
-                        graph.mergedOccurrences(), graph.barrierCount(), compileNanos,
-                        System.nanoTime() - startedAt, exception);
-            } finally {
-                if (!applied) {
-                    missing.clear();
-                    missing.addAll(missingSnapshot);
+                long startedAt = System.nanoTime();
+                var compiler = new Compiler(maxNodes, startedAt + compileBudgetNanos,
+                        pauseCheckpoint);
+                try {
+                    graph = compiler.compile(requestedRoot);
+                } catch (Fallback fallback) {
+                    structuralFailure = fallback.reason;
+                } catch (RuntimeException exception) {
+                    structuralFailure = "internal_compile_exception";
+                    structuralError = exception;
+                } finally {
+                    compileNanos = Math.max(0,
+                            System.nanoTime() - startedAt - compiler.pausedNanos);
                 }
             }
-        }
 
-        private void compile(CraftingTreeNode requestedRoot) throws InterruptedException {
+            if (graph == null) {
+                return Result.fallback(structuralFailure, 0, 0, 0,
+                        compileNanos, 0, structuralError);
+            }
+            String executionSafetyFailure = graph.executionSafetyFailure();
+            if (executionSafetyFailure != null) {
+                transactionalRuntimeFailure = executionSafetyFailure;
+                return Result.fallback(transactionalRuntimeFailure, graph.nodes.size(),
+                        graph.mergedOccurrences, graph.barrierCount,
+                        compileNanos, 0, null);
+            }
+
             long startedAt = System.nanoTime();
-            var compiler = new Compiler(maxNodes, startedAt + compileBudgetNanos, bridge);
             try {
-                graph = compiler.compile(requestedRoot);
+                execute(graph, inventory, requestedAmount, simulation, missingItems,
+                        pauseCheckpoint);
+                return Result.applied(graph.nodes.size(), graph.mergedOccurrences, graph.barrierCount,
+                        graph.logicalNodeCount, graph.requiresNativeNodeCount(),
+                        compileNanos, System.nanoTime() - startedAt);
+            } catch (CraftBranchFailure failure) {
+                if (graph.requiresTransactionalFallback()) {
+                    transactionalRuntimeFailure = "transactional_graph_failed";
+                    return Result.fallback(transactionalRuntimeFailure, graph.nodes.size(),
+                            graph.mergedOccurrences, graph.barrierCount,
+                            compileNanos, System.nanoTime() - startedAt, null);
+                }
+                return Result.branchFailure(graph.nodes.size(), graph.mergedOccurrences,
+                        graph.barrierCount, compileNanos, System.nanoTime() - startedAt, failure);
             } catch (Fallback fallback) {
-                structuralFailure = fallback.reason;
+                if (graph.requiresTransactionalFallback()) {
+                    transactionalRuntimeFailure = "transactional_graph_" + fallback.reason;
+                }
+                return Result.fallback(fallback.reason, graph.nodes.size(), graph.mergedOccurrences,
+                        graph.barrierCount,
+                        compileNanos, System.nanoTime() - startedAt, null);
             } catch (RuntimeException exception) {
-                structuralFailure = "internal_compile_exception";
-                structuralError = exception;
-            } finally {
-                compileNanos = Math.max(0, System.nanoTime() - startedAt - compiler.pausedNanos);
+                if (graph.requiresTransactionalFallback()) {
+                    transactionalRuntimeFailure =
+                            "transactional_graph_internal_execution_exception";
+                }
+                return Result.fallback("internal_execution_exception", graph.nodes.size(),
+                        graph.mergedOccurrences, graph.barrierCount,
+                        compileNanos, System.nanoTime() - startedAt, exception);
             }
         }
     }
 
-    public record Result(boolean applied, String fallbackReason, int uniqueNodes, long mergedOccurrences,
-            int barrierCount, long logicalNodeCount, long compileNanos, long executionNanos,
+    public record Result(boolean applied, String fallbackReason, int uniqueNodes,
+            long mergedOccurrences, int barrierCount, long logicalNodeCount, long compileNanos,
+            long executionNanos, boolean nativeNodeCount,
             CraftBranchFailure branchFailure, Throwable error) {
-
         private static Result applied(int uniqueNodes, long mergedOccurrences, int barrierCount,
-                long logicalNodeCount, long compileNanos, long executionNanos) {
-            return new Result(true, null, uniqueNodes, mergedOccurrences, barrierCount, logicalNodeCount,
-                    compileNanos, executionNanos, null, null);
+                long logicalNodeCount, boolean nativeNodeCount,
+                long compileNanos, long executionNanos) {
+            return new Result(true, null, uniqueNodes, mergedOccurrences, barrierCount,
+                    logicalNodeCount, compileNanos, executionNanos, nativeNodeCount, null, null);
         }
 
         private static Result branchFailure(int uniqueNodes, long mergedOccurrences, int barrierCount,
                 long compileNanos, long executionNanos, CraftBranchFailure failure) {
-            return new Result(false, null, uniqueNodes, mergedOccurrences, barrierCount, 0, compileNanos,
-                    executionNanos, failure, null);
+            return new Result(false, null, uniqueNodes, mergedOccurrences, barrierCount,
+                    0, compileNanos, executionNanos, false, failure, null);
         }
 
-        private static Result fallback(String reason, int uniqueNodes, long mergedOccurrences, int barrierCount,
+        private static Result fallback(String reason, int uniqueNodes, long mergedOccurrences,
+                int barrierCount,
                 long compileNanos, long executionNanos, Throwable error) {
-            return new Result(false, reason, uniqueNodes, mergedOccurrences, barrierCount, 0, compileNanos,
-                    executionNanos, null, error);
+            return new Result(false, reason, uniqueNodes, mergedOccurrences, barrierCount,
+                    0, compileNanos, executionNanos, false, null, error);
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Execution
-    // ------------------------------------------------------------------------
-
-    private static void execute(Graph graph, CraftingSimulationState parent, long requestedAmount,
-            CalculationBridge bridge) throws Fallback, CraftBranchFailure, InterruptedException {
+    private static void execute(Graph graph, CraftingSimulationState parent,
+            long requestedAmount, boolean simulation, KeyCounter missingItems,
+            PauseCheckpoint pauseCheckpoint)
+            throws Fallback, CraftBranchFailure, InterruptedException {
         var inventory = new ChildCraftingSimulationState(parent);
+        if (graph.requiresTransactionalFallback()) {
+            executeTransactionalNode(
+                    graph, graph.rootIndex, inventory, requestedAmount, pauseCheckpoint);
+            inventory.applyDiff(parent);
+            return;
+        }
+        var requests = new long[graph.nodes.size()];
+        var stagedMissing = new KeyCounter();
+        requests[graph.rootIndex] = requestedAmount;
 
-        // Decided up front, before a single node has been delegated to AE2: this is the last thing that can still
-        // reject the aggregate outright, and rejecting it after a delegation would leave side effects behind.
-        validateTemplates(graph, inventory, bridge);
-
-        var requests = new long[graph.nodes().size()];
-        requests[graph.rootIndex()] = requestedAmount;
-
-        for (int nodeIndex : graph.topologicalOrder()) {
-            checkpoint(bridge);
+        for (int nodeIndex : graph.topologicalOrder) {
+            checkpoint(pauseCheckpoint);
             long requestMultipliers = requests[nodeIndex];
             if (requestMultipliers <= 0) {
                 continue;
             }
 
-            Node node = graph.nodes().get(nodeIndex);
+            Node node = graph.nodes.get(nodeIndex);
             if (node.barrier) {
-                if (!tryExecuteReusableContainerBoundary(node, inventory, requestMultipliers, bridge)) {
-                    node.firstBridge().fantasytechnology$request(inventory, requestMultipliers, null);
+                if (node.occurrences.size() != 1) {
+                    throw new Fallback("shared_unsafe_boundary:" + node.barrierReason);
                 }
+                boolean nestedRecursiveDurability = node.index != graph.rootIndex
+                        && "recursive_durability_input".equals(node.barrierReason);
+                if (tryExecuteReusableContainerBoundary(
+                        node, inventory, requestMultipliers, pauseCheckpoint)) {
+                    continue;
+                }
+                if (nestedRecursiveDurability) {
+                    // A rejected speculative boundary must not invoke the native
+                    // node and then continue through the aggregated graph. Abort
+                    // the child transaction and let the caller rerun the whole
+                    // tree through AE2 instead.
+                    throw new Fallback("nested_recursive_durability_boundary_rejected");
+                }
+                var bridge = (OmniCraftingTreeNodeBridge) node.occurrences.getFirst();
+                bridge.fantasytechnology$request(inventory, requestMultipliers, null);
                 continue;
             }
-
+            validateTemplates(node, inventory, pauseCheckpoint);
+            long requestedItems = checkedMultiply(node.amount, requestMultipliers,
+                    "request_amount_overflow");
             inventory.addStackBytes(node.key, node.amount, requestMultipliers);
 
-            // The compiler proved this node's only template is its own key, so AE2's template walk collapses into
-            // one extract of whole multiples.
-            long extractLimit = saturatedMultiply(node.amount, requestMultipliers);
-            long available = inventory.extract(node.key, extractLimit, Actionable.SIMULATE);
+            long available = inventory.extract(node.key, requestedItems, Actionable.SIMULATE);
             long extractedMultipliers = Math.min(requestMultipliers, available / node.amount);
             if (extractedMultipliers > 0) {
                 long extractedAmount = node.amount * extractedMultipliers;
@@ -229,35 +251,35 @@ public final class OmniMaxFastPlanner {
                 continue;
             }
 
-            long totalRequestedItems = saturatedMultiply(node.amount, remainingMultipliers);
+            long totalRequestedItems = checkedMultiply(node.amount, remainingMultipliers,
+                    "remaining_request_overflow");
             if (node.emitter) {
                 inventory.emitItems(node.key, totalRequestedItems);
                 continue;
             }
             if (node.terminal) {
-                // Exactly what AE2 does with a node it can neither craft nor emit: a simulating attempt records the
-                // shortfall and carries on, a real one gives up on this branch.
-                if (!bridge.fantasyTechnology$simulating()) {
+                if (!simulation) {
                     throw new CraftBranchFailure(node.key, totalRequestedItems);
                 }
-                bridge.fantasyTechnology$missingItems().add(node.key, totalRequestedItems);
+                // AE2 records an exact terminal shortfall during the simulated
+                // attempt and then lets parent patterns continue building the
+                // plan. Stage it until the entire aggregated graph succeeds so
+                // a later fallback cannot leak or duplicate missing entries.
+                stagedMissing.add(node.key, totalRequestedItems);
                 continue;
-            }
-            if (node.outputPerPattern <= 0) {
-                // Unreachable: the compiler commits a node's edges and its output count together. Kept so a future
-                // change cannot turn this into a division by zero halfway through a plan.
-                throw new Fallback("uncompiled_node");
             }
 
             long patternTimes = ceilDiv(totalRequestedItems, node.outputPerPattern);
             for (Edge edge : node.edges) {
-                requests[edge.childIndex()] = saturatedAdd(requests[edge.childIndex()],
-                        saturatedMultiply(edge.requestMultiplier(), patternTimes));
+                long childRequests = checkedMultiply(edge.requestMultiplier, patternTimes,
+                        "child_request_overflow");
+                requests[edge.childIndex] = checkedAdd(
+                        requests[edge.childIndex], childRequests,
+                        "merged_request_overflow");
             }
 
-            // AE2 inserts the whole production and extracts what it needs back out; the net effect on the
-            // simulation inventory is the surplus, so only that is recorded.
-            long surplus = Math.max(0, saturatedMultiply(node.outputPerPattern, patternTimes) - totalRequestedItems);
+            long remainder = totalRequestedItems % node.outputPerPattern;
+            long surplus = remainder == 0 ? 0 : node.outputPerPattern - remainder;
             if (surplus > 0) {
                 inventory.insert(node.key, surplus, Actionable.MODULATE);
             }
@@ -266,86 +288,117 @@ public final class OmniMaxFastPlanner {
         }
 
         inventory.applyDiff(parent);
+        missingItems.addAll(stagedMissing);
     }
 
-    /// Confirms that every node still resolves to exactly its own key and amount.
-    ///
-    /// Only nodes fed by an input that can match loosely are checked - for AE2's own exact patterns the template set
-    /// is the encoded key by construction, and walking the simulation inventory for them would cost more than the
-    /// aggregation saves.
-    private static void validateTemplates(Graph graph, CraftingSimulationState inventory, CalculationBridge bridge)
+    private static void executeTransactionalNode(Graph graph, int nodeIndex,
+            CraftingSimulationState inventory, long requestMultipliers,
+            PauseCheckpoint pauseCheckpoint)
             throws Fallback, InterruptedException {
-        for (Node node : graph.nodes()) {
-            if (node.barrier || node.exactTemplates) {
-                continue;
+        checkpoint(pauseCheckpoint);
+        if (requestMultipliers <= 0) {
+            return;
+        }
+
+        Node node = graph.nodes.get(nodeIndex);
+        if (node.barrier) {
+            throw new Fallback("transactional_barrier:" + node.barrierReason);
+        }
+        validateTemplates(node, inventory, pauseCheckpoint);
+
+        long requestedItems = checkedMultiply(
+                node.amount, requestMultipliers, "request_amount_overflow");
+        inventory.addStackBytes(node.key, node.amount, requestMultipliers);
+
+        long available = inventory.extract(node.key, requestedItems, Actionable.SIMULATE);
+        long extractedMultipliers = Math.min(
+                requestMultipliers, available / node.amount);
+        if (extractedMultipliers > 0) {
+            long extractedAmount = node.amount * extractedMultipliers;
+            long extracted = inventory.extract(
+                    node.key, extractedAmount, Actionable.MODULATE);
+            if (extracted != extractedAmount) {
+                throw new IllegalStateException(
+                        "Crafting simulation inventory changed during exact extraction");
             }
-            checkpoint(bridge);
-            for (CraftingTreeNode occurrence : node.occurrences) {
-                var occurrenceBridge = (OmniCraftingTreeNodeBridge) occurrence;
-                for (InputTemplate template : occurrenceBridge.fantasytechnology$getValidItemTemplates(inventory)) {
-                    if (!node.key.equals(template.key()) || template.amount() != node.amount) {
-                        throw new Fallback("fuzzy_or_contextual_input");
-                    }
+        }
+
+        long remainingMultipliers = requestMultipliers - extractedMultipliers;
+        if (remainingMultipliers == 0) {
+            return;
+        }
+        long totalRequestedItems = checkedMultiply(
+                node.amount, remainingMultipliers, "remaining_request_overflow");
+        if (node.emitter) {
+            inventory.emitItems(node.key, totalRequestedItems);
+            return;
+        }
+        if (node.terminal) {
+            throw new Fallback("missing_terminal_input");
+        }
+
+        long patternTimes = ceilDiv(totalRequestedItems, node.outputPerPattern);
+        var returnedReusableInputs = new KeyCounter();
+        for (OrderedGraphInput orderedInput : node.orderedInputs) {
+            checkpoint(pauseCheckpoint);
+            if (orderedInput.reusable()) {
+                GraphReusableInput reusableInput = orderedInput.reusableInput;
+                if (reusableInput.mode != BoundaryInputMode.INVARIANT_REUSABLE
+                        || !leaseInvariantReusableInput(
+                                inventory, reusableInput, patternTimes,
+                                returnedReusableInputs, pauseCheckpoint)) {
+                    throw new Fallback("reusable_input_unavailable");
                 }
+            } else {
+                long childRequests = checkedMultiply(
+                        orderedInput.multiplier, patternTimes,
+                        "child_request_overflow");
+                executeTransactionalNode(
+                        graph, orderedInput.childIndex, inventory,
+                        childRequests, pauseCheckpoint);
             }
         }
-    }
 
-    /// How many nodes AE2's own walk would have visited, which is what its byte cost is derived from.
-    ///
-    /// Every graph node contributes once per tree position that reaches it. A boundary contributes its whole
-    /// subtree, because AE2 really did walk it - and by the time this runs, after execution, that subtree has been
-    /// built and can be counted for real.
-    private static long countLogicalNodes(Graph graph) {
-        var occurrences = new long[graph.nodes().size()];
-        occurrences[graph.rootIndex()] = 1;
-
-        long total = 0;
-        for (int nodeIndex : graph.topologicalOrder()) {
-            long nodeOccurrences = occurrences[nodeIndex];
-            if (nodeOccurrences <= 0) {
-                continue;
-            }
-            Node node = graph.nodes().get(nodeIndex);
-            long subtree = node.barrier
-                    ? Math.max(1, node.firstBridge().fantasytechnology$getNodeCount())
-                    : 1;
-            total = saturatedAdd(total, saturatedMultiply(nodeOccurrences, subtree));
-            for (Edge edge : node.edges) {
-                occurrences[edge.childIndex()] = saturatedAdd(occurrences[edge.childIndex()],
-                        saturatedMultiply(nodeOccurrences, edge.occurrences()));
-            }
+        for (var stack : returnedReusableInputs) {
+            inventory.insert(stack.getKey(), stack.getLongValue(), Actionable.MODULATE);
+            long logicalReturns = checkedMultiply(
+                    stack.getLongValue(), patternTimes,
+                    "reusable_return_bytes_overflow");
+            inventory.addStackBytes(stack.getKey(), 1, logicalReturns);
         }
-        return total;
+
+        long remainder = totalRequestedItems % node.outputPerPattern;
+        long surplus = remainder == 0 ? 0 : node.outputPerPattern - remainder;
+        if (surplus > 0) {
+            inventory.insert(node.key, surplus, Actionable.MODULATE);
+        }
+        inventory.addCrafting(node.details, patternTimes);
+        inventory.addBytes(patternTimes);
     }
 
-    // ------------------------------------------------------------------------
-    // Reusable-container boundaries
-    // ------------------------------------------------------------------------
-
-    /// Handles the one boundary shape worth special-casing: a recipe that borrows a tool or container instead of
-    /// consuming it. AE2 marks such a process quantity-limited and therefore plans it one craft at a time, which is
-    /// what makes a 1000-use crystal take a thousand recursive requests. Here the crafts are collapsed into a single
-    /// scaled step - one tool borrowed, the worn remains handed back.
-    ///
-    /// Returns {@code false} when the shape is not the expected one, in which case the caller delegates to AE2. Every
-    /// such rejection happens before any child has been requested, so falling back costs nothing but time.
-    private static boolean tryExecuteReusableContainerBoundary(Node node, CraftingSimulationState parent,
-            long requestedAmount, CalculationBridge bridge) throws CraftBranchFailure, InterruptedException {
+    private static boolean tryExecuteReusableContainerBoundary(Node node,
+            CraftingSimulationState parent, long requestedAmount,
+            PauseCheckpoint pauseCheckpoint)
+            throws CraftBranchFailure, InterruptedException {
         try {
-            return tryExecuteReusableContainerBoundaryUnchecked(node, parent, requestedAmount, bridge);
+            return tryExecuteReusableContainerBoundaryUnchecked(
+                    node, parent, requestedAmount, pauseCheckpoint);
         } catch (NoSuchElementException exception) {
             return rejectReusableBoundary(node, null, "provider_missing", exception);
         }
     }
 
-    private static boolean tryExecuteReusableContainerBoundaryUnchecked(Node node, CraftingSimulationState parent,
-            long requestedAmount, CalculationBridge bridge) throws CraftBranchFailure, InterruptedException {
-        if (!"container_items".equals(node.barrierReason)) {
-            return rejectReusableBoundary(node, null, "unsupported_barrier:" + node.barrierReason, null);
+    private static boolean tryExecuteReusableContainerBoundaryUnchecked(Node node,
+            CraftingSimulationState parent, long requestedAmount,
+            PauseCheckpoint pauseCheckpoint)
+            throws CraftBranchFailure, InterruptedException {
+        if (!"container_items".equals(node.barrierReason)
+                && !"recursive_durability_input".equals(node.barrierReason)) {
+            return rejectReusableBoundary(node, null,
+                    "unsupported_barrier:" + node.barrierReason, null);
         }
 
-        var nodeBridge = node.firstBridge();
+        var nodeBridge = (OmniCraftingTreeNodeBridge) node.occurrences.getFirst();
         List<CraftingTreeProcess> processes = nodeBridge.fantasytechnology$getProcesses();
         if (processes == null || processes.size() != 1) {
             return rejectReusableBoundary(node, null, "pattern_candidate_count", null);
@@ -368,7 +421,6 @@ public final class OmniMaxFastPlanner {
         if (inputs == null || childNodes == null || inputs.length != childNodes.size()) {
             return rejectReusableBoundary(node, details, "dynamic_input_layout", null);
         }
-
         long outputPerPattern = 0;
         for (var output : details.getOutputs()) {
             if (output == null || output.what() == null || output.amount() <= 0) {
@@ -387,7 +439,8 @@ public final class OmniMaxFastPlanner {
         attempt.addStackBytes(node.key, node.amount, requestedAmount);
         long remainingAmount = requestedAmount;
         for (InputTemplate template : nodeBridge.fantasytechnology$getValidItemTemplates(attempt)) {
-            remainingAmount -= extractTemplateMultipliers(attempt, template, remainingAmount);
+            long extracted = extractTemplateMultipliers(attempt, template, remainingAmount);
+            remainingAmount -= extracted;
             if (remainingAmount == 0) {
                 attempt.applyDiff(parent);
                 return true;
@@ -396,25 +449,11 @@ public final class OmniMaxFastPlanner {
 
         long totalRequestedItems = saturatedMultiply(node.amount, remainingAmount);
         long patternTimes = ceilDiv(totalRequestedItems, outputPerPattern);
-
-        // Every reason to give up has to be found before the first child request below, so the scaled production is
-        // checked for overflow here rather than by comparing what came back out afterwards.
-        long produced = 0;
-        for (var output : details.getOutputs()) {
-            long scaled = saturatedMultiply(output.amount(), patternTimes);
-            produced = saturatedAdd(produced, scaled);
-            if (scaled == Long.MAX_VALUE || produced == Long.MAX_VALUE) {
-                return rejectReusableBoundary(node, details, "output_overflow", null);
-            }
-        }
-        if (produced < totalRequestedItems) {
-            return rejectReusableBoundary(node, details, "insufficient_output", null);
-        }
-
         var inputPlans = new ArrayList<BoundaryInputPlan>(inputs.length);
+        int deterministicDamageInputs = 0;
         int inputIndex = 0;
         for (var entry : childNodes.entrySet()) {
-            checkpoint(bridge);
+            checkpoint(pauseCheckpoint);
             CraftingTreeNode child = entry.getKey();
             var childBridge = (OmniCraftingTreeNodeBridge) child;
             IPatternDetails.IInput input = inputs[inputIndex++];
@@ -425,25 +464,58 @@ public final class OmniMaxFastPlanner {
                 return rejectReusableBoundary(node, details, "self_referencing_input", null);
             }
 
-            BoundaryInputClassification classification = classifyBoundaryInput(input, childBridge, attempt, bridge);
+            BoundaryInputClassification classification = classifyBoundaryInput(
+                    input, childBridge, attempt, pauseCheckpoint);
             if (classification.rejectionReason() != null) {
                 return rejectReusableBoundary(node, details, classification.rejectionReason(), null);
             }
+            BoundaryInputMode mode = classification.mode();
 
             long multiplier = input.getMultiplier();
             if (multiplier <= 0 || entry.getValue() == null || entry.getValue() != multiplier) {
                 return rejectReusableBoundary(node, details, "invalid_input_multiplier", null);
             }
-            // A borrowed input is needed once no matter how many crafts run; a consumed one scales with them.
-            long childRequest = classification.mode() == BoundaryInputMode.REUSABLE
-                    ? multiplier
-                    : saturatedMultiply(multiplier, patternTimes);
-            inputPlans.add(new BoundaryInputPlan(childBridge, childRequest));
+            if (mode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
+                deterministicDamageInputs++;
+                if (multiplier != 1) {
+                    return rejectReusableBoundary(node, details,
+                            "unsupported_damage_input_multiplier", null);
+                }
+                if (deterministicDamageInputs > 1) {
+                    return rejectReusableBoundary(node, details,
+                            "multiple_damage_inputs", null);
+                }
+            }
+            long childRequest = switch (mode) {
+                case INVARIANT_REUSABLE -> multiplier;
+                case CONSUMABLE -> saturatedMultiply(multiplier, patternTimes);
+                case DETERMINISTIC_DAMAGE -> 0;
+                case UNSAFE -> throw new IllegalStateException(
+                        "Unsafe reusable boundary input escaped classification");
+            };
+            inputPlans.add(new BoundaryInputPlan(
+                    input, childBridge, mode, childRequest, multiplier));
         }
 
         var containerItems = new KeyCounter();
+        // Resolve the speculative durability optimization before issuing any
+        // ordinary child request. A rejected durability boundary must not leak
+        // missing-item accounting into AE2 before the native planner fallback.
         for (BoundaryInputPlan inputPlan : inputPlans) {
-            inputPlan.child().fantasytechnology$request(attempt, inputPlan.requestedAmount(), containerItems);
+            if (inputPlan.mode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
+                if (!allocateDeterministicDamageInput(attempt, inputPlan.input,
+                        inputPlan.child, inputPlan.multiplier, patternTimes,
+                        pauseCheckpoint)) {
+                    return rejectReusableBoundary(node, details,
+                            "insufficient_deterministic_damage_capacity", null);
+                }
+            }
+        }
+        for (BoundaryInputPlan inputPlan : inputPlans) {
+            if (inputPlan.mode != BoundaryInputMode.DETERMINISTIC_DAMAGE) {
+                inputPlan.child.fantasytechnology$request(
+                        attempt, inputPlan.requestedAmount, containerItems);
+            }
         }
 
         for (var stack : containerItems) {
@@ -451,40 +523,38 @@ public final class OmniMaxFastPlanner {
             attempt.addStackBytes(stack.getKey(), stack.getLongValue(), 1);
         }
         for (var output : details.getOutputs()) {
-            attempt.insert(output.what(), output.amount() * patternTimes, Actionable.MODULATE);
+            attempt.insert(output.what(), saturatedMultiply(output.amount(), patternTimes),
+                    Actionable.MODULATE);
         }
         attempt.addCrafting(details, patternTimes);
         attempt.addBytes(patternTimes);
 
-        long extracted = attempt.extract(node.key, totalRequestedItems, Actionable.MODULATE);
-        if (extracted != totalRequestedItems) {
-            // The overflow guard above rules this out; if it ever happens the plan is not trustworthy, and the
-            // internal-error path discards the attempt and restores the calculation state.
-            throw new IllegalStateException("Reusable boundary produced " + extracted + " of "
-                    + totalRequestedItems + " expected outputs");
+        long produced = attempt.extract(node.key, totalRequestedItems, Actionable.MODULATE);
+        if (produced != totalRequestedItems) {
+            return rejectReusableBoundary(node, details, "produced_output_mismatch", null);
         }
         attempt.applyDiff(parent);
         return true;
     }
 
-    private static boolean rejectReusableBoundary(Node node, @Nullable IPatternDetails details, String reason,
-            @Nullable RuntimeException exception) {
+    private static boolean rejectReusableBoundary(Node node, IPatternDetails details,
+            String reason, RuntimeException exception) {
         if (FTConfig.DIAGNOSTICS.get()) {
             String pattern = describePattern(details);
             if (exception == null) {
                 FantasyTechnology.LOGGER.info(
-                        "Fantasy planner boundary fallback: key={}, amount={}, barrier={}, pattern={}, reason={}",
+                        "Omni MAX_FAST reusable boundary fallback: key={}, amount={}, barrier={}, pattern={}, reason={}",
                         node.key, node.amount, node.barrierReason, pattern, reason);
             } else {
                 FantasyTechnology.LOGGER.warn(
-                        "Fantasy planner boundary failed: key={}, amount={}, barrier={}, pattern={}, reason={}",
+                        "Omni MAX_FAST reusable boundary failed: key={}, amount={}, barrier={}, pattern={}, reason={}",
                         node.key, node.amount, node.barrierReason, pattern, reason, exception);
             }
         }
         return false;
     }
 
-    private static String describePattern(@Nullable IPatternDetails details) {
+    private static String describePattern(IPatternDetails details) {
         if (details == null) {
             return "unknown";
         }
@@ -495,38 +565,285 @@ public final class OmniMaxFastPlanner {
         }
     }
 
-    /// Whether an input is consumed by a craft or merely borrowed. Mixing the two within one input, or an input whose
-    /// remains are a *different* key that the boundary would then have to route somewhere, is not handled here.
     private static BoundaryInputClassification classifyBoundaryInput(IPatternDetails.IInput input,
-            OmniCraftingTreeNodeBridge child, CraftingSimulationState inventory, CalculationBridge bridge)
+            OmniCraftingTreeNodeBridge child, CraftingSimulationState inventory,
+            PauseCheckpoint pauseCheckpoint)
             throws InterruptedException {
-        BoundaryInputMode mode = classifyRemainingKey(input, child.fantasytechnology$getWhat());
+        BoundaryInputMode mode = classifyRemainingKey(
+                input, child.fantasytechnology$getWhat(),
+                child.fantasytechnology$getLevel());
         if (mode == BoundaryInputMode.UNSAFE) {
-            return BoundaryInputClassification.rejected("container_changes_key");
+            return BoundaryInputClassification.rejected(
+                    "unsupported_container_transition");
         }
         for (InputTemplate template : child.fantasytechnology$getValidItemTemplates(inventory)) {
-            checkpoint(bridge);
-            BoundaryInputMode templateMode = classifyRemainingKey(input, template.key());
+            checkpoint(pauseCheckpoint);
+            BoundaryInputMode templateMode = classifyRemainingKey(
+                    input, template.key(), child.fantasytechnology$getLevel());
             if (templateMode == BoundaryInputMode.UNSAFE) {
-                return BoundaryInputClassification.rejected("container_changes_key");
+                return BoundaryInputClassification.rejected(
+                        "unsupported_container_transition");
             }
             if (templateMode != mode) {
-                return BoundaryInputClassification.rejected("mixed_consumable_and_reusable_templates");
+                return BoundaryInputClassification.rejected(
+                        "mixed_container_transition_modes");
             }
         }
         return BoundaryInputClassification.accepted(mode);
     }
 
-    private static BoundaryInputMode classifyRemainingKey(IPatternDetails.IInput input, AEKey key) {
-        AEKey remainingKey = input.getRemainingKey(key);
-        if (remainingKey == null) {
-            return BoundaryInputMode.CONSUMABLE;
-        }
-        return remainingKey.equals(key) ? BoundaryInputMode.REUSABLE : BoundaryInputMode.UNSAFE;
+    private static BoundaryInputMode classifyRemainingKey(IPatternDetails.IInput input,
+            AEKey key, net.minecraft.world.level.Level level) {
+        var analysis = MolecularReusableInputAdapters.analyze(input, key, level, 2);
+        return switch (analysis.mode()) {
+            case CONSUMABLE -> BoundaryInputMode.CONSUMABLE;
+            case INVARIANT_REUSABLE -> BoundaryInputMode.INVARIANT_REUSABLE;
+            case DETERMINISTIC_DAMAGE -> BoundaryInputMode.DETERMINISTIC_DAMAGE;
+            case UNSUPPORTED -> BoundaryInputMode.UNSAFE;
+        };
     }
 
-    private static long extractTemplateMultipliers(CraftingSimulationState inventory, InputTemplate template,
-            long requestedMultipliers) {
+    /**
+     * Reserves real finite-durability tools for a pattern boundary.
+     *
+     * <p>Each selected group contains {@code inputMultiplier} tools with the
+     * exact same AE key, so a single pattern extraction never has to mix damage
+     * states. Existing tools contribute their proven remaining capacity first.
+     * If that is insufficient, the fresh primary tool is requested in one
+     * recursive batch for the remaining capacity instead of returning to AE2's
+     * one-pattern-at-a-time container loop.</p>
+     *
+     * <p>We intentionally do not credit the final damaged tools back into the
+     * planning inventory: execution may choose another valid damage state, and
+     * omitting those remainders is conservative while the real CPU still
+     * returns every exact remainder produced by the recipe. Input and remainder
+     * byte costs are nevertheless recorded for every logical use.</p>
+     */
+    private static boolean allocateDeterministicDamageInput(
+            CraftingSimulationState inventory, IPatternDetails.IInput input,
+            OmniCraftingTreeNodeBridge child, long inputMultiplier,
+            long patternTimes, PauseCheckpoint pauseCheckpoint)
+            throws CraftBranchFailure, InterruptedException {
+        if (inputMultiplier != 1 || patternTimes <= 0
+                || child.fantasytechnology$getAmount() != 1) {
+            return false;
+        }
+
+        var selections = new ArrayList<FiniteToolSelection>();
+        var seenKeys = new HashSet<AEKey>();
+        long remainingPatterns = patternTimes;
+
+        for (InputTemplate template : child.fantasytechnology$getValidItemTemplates(inventory)) {
+            checkpoint(pauseCheckpoint);
+            if (remainingPatterns == 0) {
+                break;
+            }
+            if (template == null || template.key() == null || template.amount() != 1) {
+                return false;
+            }
+            if (!seenKeys.add(template.key())) {
+                continue;
+            }
+
+            long available = inventory.extract(
+                    template.key(), Long.MAX_VALUE, Actionable.SIMULATE);
+            long availableGroups = available / inputMultiplier;
+            if (availableGroups <= 0) {
+                continue;
+            }
+
+            long capacity = measureDeterministicCapacity(
+                    input, template.key(), child.fantasytechnology$getLevel(),
+                    remainingPatterns, pauseCheckpoint);
+            if (capacity <= 0) {
+                return false;
+            }
+
+            long groupsNeeded = ceilDiv(remainingPatterns, capacity);
+            long selectedGroups = Math.min(availableGroups, groupsNeeded);
+            long toolAmount;
+            try {
+                toolAmount = Math.multiplyExact(
+                        selectedGroups, inputMultiplier);
+            } catch (ArithmeticException exception) {
+                return false;
+            }
+
+            selections.add(new FiniteToolSelection(
+                    template.key(), toolAmount));
+            long coveredPatterns = saturatedMultiply(selectedGroups, capacity);
+            long usedPatterns = Math.min(remainingPatterns, coveredPatterns);
+            remainingPatterns -= usedPatterns;
+        }
+
+        long newToolAmount = 0;
+        if (remainingPatterns > 0) {
+            AEKey freshTool = child.fantasytechnology$getWhat();
+            long freshCapacity = measureDeterministicCapacity(
+                    input, freshTool, child.fantasytechnology$getLevel(),
+                    remainingPatterns, pauseCheckpoint);
+            if (freshCapacity <= 0) {
+                return false;
+            }
+
+            long newToolGroups = ceilDiv(remainingPatterns, freshCapacity);
+            try {
+                newToolAmount = Math.multiplyExact(
+                        newToolGroups, inputMultiplier);
+            } catch (ArithmeticException exception) {
+                return false;
+            }
+        }
+
+        long logicalUses;
+        try {
+            logicalUses = Math.multiplyExact(inputMultiplier, patternTimes);
+        } catch (ArithmeticException exception) {
+            return false;
+        }
+        if (newToolAmount > logicalUses) {
+            return false;
+        }
+
+        for (FiniteToolSelection selection : selections) {
+            long extracted = inventory.extract(
+                    selection.key, selection.amount, Actionable.MODULATE);
+            if (extracted != selection.amount) {
+                throw new IllegalStateException(
+                        "Crafting simulation inventory changed during finite-tool extraction");
+            }
+        }
+
+        if (newToolAmount > 0) {
+            child.fantasytechnology$request(inventory, newToolAmount, null);
+        }
+
+        // Requesting newly crafted tools already charged their first logical
+        // input use. Existing tools and all later reuses still need that cost.
+        long additionalInputUses = logicalUses - newToolAmount;
+        if (additionalInputUses > 0) {
+            inventory.addStackBytes(
+                    child.fantasytechnology$getWhat(), 1,
+                    additionalInputUses);
+        }
+
+        // Runtime is allowed to choose another valid damage-state ordering.
+        // Charge the maximum possible remainder volume so CPU storage is never
+        // underestimated even when fewer tools actually break than planned.
+        if (logicalUses > 0) {
+            inventory.addStackBytes(
+                    child.fantasytechnology$getWhat(), 1, logicalUses);
+        }
+        return true;
+    }
+
+    /**
+     * How many crafts one finite tool of {@code key} can serve, up to {@code requiredCrafts}.
+     *
+     * <p>{@link MolecularReusableInputAdapters#analyze} validates a bounded number of damage
+     * states per call, so a tool with more durability than that budget comes back looking like one
+     * that runs out after it - and dividing the job by that truncated count makes the plan request
+     * replacement tools it does not need. Continuing the walk from the key the previous window
+     * ended on measures the whole chain instead. The item's remaining durability caps the walk, so
+     * an input whose remainder never reports the item as used up cannot spin the calculation for a
+     * million-craft order, and every window is interruptible.</p>
+     */
+    private static long measureDeterministicCapacity(IPatternDetails.IInput input, AEKey key,
+            net.minecraft.world.level.Level level, long requiredCrafts,
+            PauseCheckpoint pauseCheckpoint) throws InterruptedException {
+        long ceiling = MolecularReusableInputAdapters.remainingDurabilityCrafts(key);
+        if (ceiling <= 0) {
+            return 0;
+        }
+        long target = Math.min(requiredCrafts, ceiling);
+        long total = 0;
+        AEKey current = key;
+        while (total < target) {
+            checkpoint(pauseCheckpoint);
+            var analysis = MolecularReusableInputAdapters.analyze(
+                    input, current, level, target - total);
+            if (analysis.mode() != MolecularReusableInputAdapters.Mode.DETERMINISTIC_DAMAGE
+                    || analysis.safeCrafts() <= 0) {
+                return total;
+            }
+            total = saturatedAdd(total, analysis.safeCrafts());
+            if (analysis.finalKey() == null) {
+                // The tool is used up here, so this is its entire remaining capacity.
+                break;
+            }
+            current = analysis.finalKey();
+        }
+        return total;
+    }
+
+    private static boolean leaseInvariantReusableInput(
+            CraftingSimulationState inventory, GraphReusableInput reusableInput,
+            long patternTimes, KeyCounter returned,
+            PauseCheckpoint pauseCheckpoint) throws InterruptedException, Fallback {
+        if (reusableInput.multiplier <= 0
+                || patternTimes <= 0
+                || reusableInput.child.fantasytechnology$getAmount() != 1) {
+            return false;
+        }
+
+        long remaining = reusableInput.multiplier;
+        var selected = new KeyCounter();
+        for (InputTemplate template
+                : reusableInput.child.fantasytechnology$getValidItemTemplates(inventory)) {
+            checkpoint(pauseCheckpoint);
+            if (remaining == 0) {
+                break;
+            }
+            if (template == null || template.key() == null || template.amount() != 1) {
+                return false;
+            }
+            long available = inventory.extract(
+                    template.key(), Long.MAX_VALUE, Actionable.SIMULATE);
+            available = Math.max(0, available - selected.get(template.key()));
+            long selectedAmount = Math.min(remaining, available);
+            if (selectedAmount == 0) {
+                continue;
+            }
+            var analysis = MolecularReusableInputAdapters.analyze(
+                    reusableInput.input, template.key(),
+                    reusableInput.child.fantasytechnology$getLevel(), 2);
+            if (analysis.mode()
+                    != MolecularReusableInputAdapters.Mode.INVARIANT_REUSABLE
+                    || !template.key().equals(analysis.finalKey())) {
+                return false;
+            }
+            selected.add(template.key(), selectedAmount);
+            remaining -= selectedAmount;
+        }
+        if (remaining != 0) {
+            return false;
+        }
+
+        for (var selection : selected) {
+            checkpoint(pauseCheckpoint);
+            long extracted = inventory.extract(
+                    selection.getKey(), selection.getLongValue(), Actionable.MODULATE);
+            if (extracted != selection.getLongValue()) {
+                throw new IllegalStateException(
+                        "Crafting simulation inventory changed during reusable extraction");
+            }
+            long returnedAmount = checkedAdd(
+                    returned.get(selection.getKey()), extracted,
+                    "reusable_return_count_overflow");
+            returned.set(selection.getKey(), returnedAmount);
+        }
+
+        long logicalUses = checkedMultiply(
+                reusableInput.multiplier, patternTimes,
+                "reusable_input_bytes_overflow");
+        inventory.addStackBytes(
+                reusableInput.child.fantasytechnology$getWhat(), 1,
+                logicalUses);
+        return true;
+    }
+
+    private static long extractTemplateMultipliers(CraftingSimulationState inventory,
+            InputTemplate template, long requestedMultipliers) {
         long extractLimit = saturatedMultiply(template.amount(), requestedMultipliers);
         long available = inventory.extract(template.key(), extractLimit, Actionable.SIMULATE);
         long extractedMultipliers = Math.min(requestedMultipliers, available / template.amount());
@@ -543,12 +860,12 @@ public final class OmniMaxFastPlanner {
 
     private enum BoundaryInputMode {
         CONSUMABLE,
-        REUSABLE,
+        INVARIANT_REUSABLE,
+        DETERMINISTIC_DAMAGE,
         UNSAFE
     }
 
-    private record BoundaryInputClassification(BoundaryInputMode mode, @Nullable String rejectionReason) {
-
+    private record BoundaryInputClassification(BoundaryInputMode mode, String rejectionReason) {
         private static BoundaryInputClassification accepted(BoundaryInputMode mode) {
             return new BoundaryInputClassification(mode, null);
         }
@@ -558,40 +875,78 @@ public final class OmniMaxFastPlanner {
         }
     }
 
-    private record BoundaryInputPlan(OmniCraftingTreeNodeBridge child, long requestedAmount) {
+    private record BoundaryInputPlan(IPatternDetails.IInput input,
+            OmniCraftingTreeNodeBridge child, BoundaryInputMode mode,
+            long requestedAmount, long multiplier) {
     }
 
-    // ------------------------------------------------------------------------
-    // Compilation
-    // ------------------------------------------------------------------------
+    private record GraphReusableInput(IPatternDetails.IInput input,
+            OmniCraftingTreeNodeBridge child, BoundaryInputMode mode,
+            long multiplier) {
+    }
+
+    private record OrderedGraphInput(int childIndex, long multiplier,
+            GraphReusableInput reusableInput) {
+        private static OrderedGraphInput consumable(int childIndex, long multiplier) {
+            return new OrderedGraphInput(childIndex, multiplier, null);
+        }
+
+        private static OrderedGraphInput reusable(GraphReusableInput reusableInput) {
+            return new OrderedGraphInput(-1, 0, reusableInput);
+        }
+
+        private boolean reusable() {
+            return reusableInput != null;
+        }
+    }
+
+    private record FiniteToolSelection(AEKey key, long amount) {
+    }
+
+    private static void validateTemplates(Node node, CraftingSimulationState inventory,
+            PauseCheckpoint pauseCheckpoint)
+            throws Fallback, InterruptedException {
+        for (CraftingTreeNode occurrence : node.occurrences) {
+            checkpoint(pauseCheckpoint);
+            var bridge = (OmniCraftingTreeNodeBridge) occurrence;
+            Iterable<InputTemplate> templates = bridge.fantasytechnology$getValidItemTemplates(inventory);
+            for (InputTemplate template : templates) {
+                if (!node.key.equals(template.key()) || template.amount() != node.amount) {
+                    throw new Fallback("fuzzy_or_contextual_input");
+                }
+            }
+        }
+    }
 
     private static final class Compiler {
-
         private final int maxNodes;
-        private final CalculationBridge bridge;
-        private final List<Node> nodes = new ArrayList<>();
-        private final Object2IntOpenHashMap<NodeKey> nodeIndexes = new Object2IntOpenHashMap<>();
-        /// Which node first expanded a given pattern instance. Identity, not equality: two nodes sharing a pattern
-        /// object would each scale it by their own request unit.
-        private final Reference2IntOpenHashMap<IPatternDetails> patternOwners = new Reference2IntOpenHashMap<>();
         private long deadline;
+        private final PauseCheckpoint pauseCheckpoint;
+        private final List<Node> nodes = new ArrayList<>();
+        private final Map<NodeKey, Integer> nodeIndexes = new HashMap<>();
+        private final Map<IPatternDetails, Integer> patternOwners = new IdentityHashMap<>();
         private long mergedOccurrences;
         private long pausedNanos;
+        private int orderedChoiceCount;
+        /// Whether any pattern reached while inspecting the tree is one of this mod's. Checked once the whole graph
+        /// is known, because a fantasy pattern may sit anywhere in it, not just at the root.
+        private boolean usesFantasyPattern;
 
-        private Compiler(int maxNodes, long deadline, CalculationBridge bridge) {
+        private Compiler(int maxNodes, long deadline, PauseCheckpoint pauseCheckpoint) {
             this.maxNodes = maxNodes;
             this.deadline = deadline;
-            this.bridge = bridge;
-            this.nodeIndexes.defaultReturnValue(-1);
-            this.patternOwners.defaultReturnValue(-1);
+            this.pauseCheckpoint = pauseCheckpoint;
         }
 
         private Graph compile(CraftingTreeNode root) throws Fallback, InterruptedException {
             int rootIndex = intern(root);
-            // A node is only ever added by intern, and intern only runs once a parent has fully validated the edge
-            // that reaches it, so appending to the list while walking it visits every node exactly once.
-            for (Node node : nodes) {
+            nodes.get(rootIndex).reachable = true;
+            for (int index = 0; index < nodes.size(); index++) {
                 checkBudget();
+                Node node = nodes.get(index);
+                if (!node.reachable) {
+                    continue;
+                }
                 try {
                     inspect(node);
                 } catch (Barrier barrier) {
@@ -600,42 +955,85 @@ public final class OmniMaxFastPlanner {
                     if (requiresImmediateFallback(barrier.reason)) {
                         if (FTConfig.DIAGNOSTICS.get()) {
                             FantasyTechnology.LOGGER.info(
-                                    "Fantasy planner compile-time fallback: key={}, amount={}, barrier={}, pattern={}",
-                                    node.key, node.amount, node.barrierReason, describePattern(node.details));
+                                    "Omni MAX_FAST compile-time fallback: key={}, amount={}, barrier={}, pattern={}",
+                                    node.key, node.amount, node.barrierReason,
+                                    describePattern(node.details));
                         }
                         throw new Fallback("unsafe_pattern_boundary:" + barrier.reason);
                     }
                 }
             }
 
+            // A tree that never reaches one of this mod's patterns is somebody else's job. Aggregating it would
+            // change how AE2 - and any other addon driving the same calculation - plans work this mod has no stake
+            // in, so hand those trees straight back rather than widening the blast radius to the whole grid.
+            if (!usesFantasyPattern) {
+                throw new Fallback("no_fantasy_pattern");
+            }
+
+            validateReusableGraphConflicts();
+
+            int[] topologicalOrder = buildTopologicalOrder();
+            long logicalNodeCount = countLogicalNodes(rootIndex, topologicalOrder);
             int barrierCount = 0;
             for (Node node : nodes) {
-                if (node.barrier) {
-                    // A boundary reached from several places would be re-requested in full once per parent, which
-                    // is exactly the blow-up this planner exists to avoid.
-                    if (node.occurrences.size() != 1) {
-                        throw new Fallback("shared_unsafe_boundary:" + node.barrierReason);
-                    }
+                if (node.reachable && node.barrier) {
                     barrierCount++;
                 }
             }
+            return new Graph(List.copyOf(nodes), topologicalOrder, rootIndex,
+                    logicalNodeCount, mergedOccurrences, barrierCount, orderedChoiceCount);
+        }
 
-            return new Graph(List.copyOf(nodes), buildTopologicalOrder(), rootIndex, mergedOccurrences,
-                    barrierCount);
+        /**
+         * Aggregating all repetitions of an earlier consumable input can change
+         * the amount of its surplus that is visible to a later reusable slot.
+         * Reject that graph whenever any ordinary graph key is also a valid
+         * candidate for a reusable input. Otherwise candidate availability is
+         * unchanged by recursive planning, so leasing the first invariant
+         * candidate once is equivalent to AE2 leasing and returning it once per
+         * pattern execution.
+         */
+        private void validateReusableGraphConflicts()
+                throws Fallback, InterruptedException {
+            for (Node owner : nodes) {
+                if (!owner.reachable || owner.reusableInputs.isEmpty()) {
+                    continue;
+                }
+                for (GraphReusableInput reusableInput : owner.reusableInputs) {
+                    for (Node graphNode : nodes) {
+                        if (!graphNode.reachable) {
+                            continue;
+                        }
+                        checkBudget();
+                        try {
+                            if (reusableInput.input.isValid(
+                                    graphNode.key,
+                                    reusableInput.child.fantasytechnology$getLevel())) {
+                                throw new Fallback("reusable_candidate_graph_conflict");
+                            }
+                        } catch (Fallback fallback) {
+                            throw fallback;
+                        } catch (RuntimeException exception) {
+                            throw new Fallback("reusable_candidate_validation_error");
+                        }
+                    }
+                }
+            }
         }
 
         private int intern(CraftingTreeNode occurrence) throws Fallback, InterruptedException {
             checkBudget();
-            var occurrenceBridge = (OmniCraftingTreeNodeBridge) occurrence;
-            AEKey key = occurrenceBridge.fantasytechnology$getWhat();
-            long amount = occurrenceBridge.fantasytechnology$getAmount();
+            var bridge = (OmniCraftingTreeNodeBridge) occurrence;
+            AEKey key = bridge.fantasytechnology$getWhat();
+            long amount = bridge.fantasytechnology$getAmount();
             if (key == null || amount <= 0) {
                 throw new Fallback("invalid_node_template");
             }
 
             var nodeKey = new NodeKey(key, amount);
-            int existing = nodeIndexes.getInt(nodeKey);
-            if (existing >= 0) {
+            Integer existing = nodeIndexes.get(nodeKey);
+            if (existing != null) {
                 nodes.get(existing).occurrences.add(occurrence);
                 mergedOccurrences = saturatedAdd(mergedOccurrences, 1);
                 return existing;
@@ -645,21 +1043,16 @@ public final class OmniMaxFastPlanner {
             }
 
             int index = nodes.size();
-            var node = new Node(index, key, amount, occurrenceBridge.fantasytechnology$getLevel());
+            var node = new Node(index, key, amount, bridge.fantasytechnology$getLevel());
             node.occurrences.add(occurrence);
             nodes.add(node);
             nodeIndexes.put(nodeKey, index);
             return index;
         }
 
-        /// Validates one node's recipe in full and only then commits it to the graph.
-        ///
-        /// The two halves are strictly separated: nothing is interned, no edge is recorded and no occurrence is
-        /// registered until every input has passed. A {@link Barrier} thrown halfway would otherwise leave children
-        /// in the node list that no parent ever inspected, and a later parent reaching one of them would execute a
-        /// node with no recipe behind it.
         private void inspect(Node node) throws Fallback, Barrier, InterruptedException {
-            var nodeBridge = node.firstBridge();
+            var occurrence = node.occurrences.getFirst();
+            var nodeBridge = (OmniCraftingTreeNodeBridge) occurrence;
             if (nodeBridge.fantasytechnology$canEmit()) {
                 node.emitter = true;
                 return;
@@ -668,23 +1061,43 @@ public final class OmniMaxFastPlanner {
             nodeBridge.fantasytechnology$buildChildPatterns();
             List<CraftingTreeProcess> processes = nodeBridge.fantasytechnology$getProcesses();
             if (processes == null || processes.isEmpty()) {
+                // Pattern availability is recursion-contextual in AE2. A key
+                // merged from several tree occurrences is a safe terminal only
+                // when every occurrence has no viable process; otherwise fast
+                // simulation could report craftable items as missing.
+                for (int occurrenceIndex = 1;
+                        occurrenceIndex < node.occurrences.size(); occurrenceIndex++) {
+                    checkBudget();
+                    var occurrenceBridge = (OmniCraftingTreeNodeBridge)
+                            node.occurrences.get(occurrenceIndex);
+                    occurrenceBridge.fantasytechnology$buildChildPatterns();
+                    List<CraftingTreeProcess> occurrenceProcesses =
+                            occurrenceBridge.fantasytechnology$getProcesses();
+                    if (occurrenceProcesses == null || !occurrenceProcesses.isEmpty()) {
+                        throw new Fallback("contextual_terminal");
+                    }
+                }
                 node.terminal = true;
                 return;
             }
-            if (processes.size() != 1) {
-                throw new Barrier("multiple_pattern_candidates");
+            if (processes.size() > 1) {
+                // AE2 tries candidates in this exact order and exhausts the first viable one
+                // before considering the next. Compile that first choice transactionally so a
+                // deterministic, unit-template branch can be requested in bulk. If execution
+                // cannot satisfy the whole request, Session discards the child state and falls
+                // back to AE2's original multi-candidate search without changing its result.
+                orderedChoiceCount++;
             }
 
             var process = (OmniCraftingTreeProcessBridge) processes.getFirst();
-            if (process.fantasytechnology$hasContainerItems()) {
-                throw new Barrier("container_items");
-            }
-            if (process.fantasytechnology$limitsQuantity()) {
+            boolean hasContainerItems = process.fantasytechnology$hasContainerItems();
+            if (process.fantasytechnology$limitsQuantity() && !hasContainerItems) {
                 throw new Barrier("quantity_limited_pattern");
             }
 
             IPatternDetails details = process.fantasytechnology$getDetails();
             node.details = details;
+            usesFantasyPattern |= details instanceof FantasyCraftingPattern;
             String patternBarrierReason = getPatternBarrierReason(details);
             if (patternBarrierReason != null) {
                 throw new Barrier(patternBarrierReason);
@@ -698,7 +1111,8 @@ public final class OmniMaxFastPlanner {
                 if (!node.key.equals(output.what())) {
                     throw new Barrier("secondary_or_fuzzy_output");
                 }
-                outputPerPattern = saturatedAdd(outputPerPattern, output.amount());
+                outputPerPattern = checkedAdd(
+                        outputPerPattern, output.amount(), "output_count_overflow");
             }
             if (outputPerPattern <= 0) {
                 throw new Barrier("missing_primary_output");
@@ -710,23 +1124,20 @@ public final class OmniMaxFastPlanner {
                 throw new Barrier("dynamic_input_layout");
             }
 
-            var pendingEdges = new ArrayList<PendingEdge>(inputs.length);
+            var accumulators = new LinkedHashMap<Integer, EdgeAccumulator>();
             int inputIndex = 0;
             for (var entry : childNodes.entrySet()) {
                 checkBudget();
-                var childBridge = (OmniCraftingTreeNodeBridge) entry.getKey();
+                CraftingTreeNode child = entry.getKey();
+                var childBridge = (OmniCraftingTreeNodeBridge) child;
                 IPatternDetails.IInput input = inputs[inputIndex++];
                 if (childBridge.fantasytechnology$getParentInput() != input) {
                     throw new Barrier("dynamic_input_identity");
                 }
 
-                var possibleInputs = input.getPossibleInputs();
-                if (possibleInputs.length != 1) {
+                GenericStack possibleInput = getPrimaryInputChoice(input);
+                if (possibleInput == null) {
                     throw new Barrier("substitute_input");
-                }
-                var possibleInput = possibleInputs[0];
-                if (possibleInput == null || possibleInput.what() == null || possibleInput.amount() <= 0) {
-                    throw new Barrier("invalid_pattern_input");
                 }
                 if (!possibleInput.what().equals(childBridge.fantasytechnology$getWhat())
                         || possibleInput.amount() != childBridge.fantasytechnology$getAmount()) {
@@ -735,55 +1146,75 @@ public final class OmniMaxFastPlanner {
                 if (!input.isValid(possibleInput.what(), node.level)) {
                     throw new Barrier("dynamic_input_validation");
                 }
-                if (input.getRemainingKey(possibleInput.what()) != null) {
-                    throw new Barrier("container_items");
-                }
 
                 long multiplier = input.getMultiplier();
                 if (multiplier <= 0 || entry.getValue() == null || entry.getValue() != multiplier) {
                     throw new Barrier("invalid_input_multiplier");
                 }
-                pendingEdges.add(new PendingEdge(entry.getKey(), multiplier));
-            }
 
-            int patternOwner = patternOwners.getInt(details);
-            if (patternOwner >= 0 && patternOwner != node.index) {
-                throw new Barrier("shared_pattern_with_different_request_units");
-            }
-            patternOwners.put(details, node.index);
+                BoundaryInputMode inputMode = classifyRemainingKey(
+                        input, possibleInput.what(), node.level);
+                if (inputMode == BoundaryInputMode.UNSAFE) {
+                    throw new Barrier("container_items");
+                }
+                if (inputMode == BoundaryInputMode.CONSUMABLE
+                        && getSingleExactInputChoice(input) == null) {
+                    throw new Barrier("substitute_input");
+                }
+                if (inputMode != BoundaryInputMode.CONSUMABLE) {
+                    if (!hasContainerItems || childBridge.fantasytechnology$getAmount() != 1
+                            || node.key.equals(childBridge.fantasytechnology$getWhat())) {
+                        throw new Barrier("unsupported_reusable_input");
+                    }
+                    if (inputMode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
+                        throw new Barrier("recursive_durability_input");
+                    }
+                    var reusableInput = new GraphReusableInput(
+                            input, childBridge, inputMode, multiplier);
+                    node.reusableInputs.add(reusableInput);
+                    node.orderedInputs.add(OrderedGraphInput.reusable(reusableInput));
+                    continue;
+                }
 
-            // From here on nothing can fail except the node budget, which discards the whole graph anyway.
-            node.outputPerPattern = outputPerPattern;
-            boolean exactTemplates = hasExactInputTemplates(details);
-            var accumulators = new Int2ObjectLinkedOpenHashMap<EdgeAccumulator>(pendingEdges.size());
-            for (PendingEdge pending : pendingEdges) {
-                int childIndex = intern(pending.child());
+                int childIndex = intern(child);
+                node.orderedInputs.add(OrderedGraphInput.consumable(
+                        childIndex, multiplier));
                 var accumulator = accumulators.get(childIndex);
                 if (accumulator == null) {
-                    accumulators.put(childIndex, new EdgeAccumulator(pending.multiplier()));
+                    accumulators.put(childIndex, new EdgeAccumulator(multiplier));
                 } else {
-                    accumulator.requestMultiplier = saturatedAdd(accumulator.requestMultiplier,
-                            pending.multiplier());
+                    accumulator.requestMultiplier = checkedAdd(
+                            accumulator.requestMultiplier, multiplier,
+                            "input_multiplier_overflow");
                     accumulator.occurrences++;
                 }
-                if (!exactTemplates) {
-                    nodes.get(childIndex).exactTemplates = false;
-                }
             }
-            for (var entry : accumulators.int2ObjectEntrySet()) {
+            if (hasContainerItems && node.reusableInputs.isEmpty()) {
+                throw new Barrier("container_flag_without_supported_input");
+            }
+
+            Integer patternOwner = patternOwners.putIfAbsent(details, node.index);
+            if (patternOwner != null && patternOwner != node.index) {
+                throw new Barrier("shared_pattern_with_different_request_units");
+            }
+            node.outputPerPattern = outputPerPattern;
+            for (var entry : accumulators.entrySet()) {
                 var accumulator = entry.getValue();
-                node.edges.add(new Edge(entry.getIntKey(), accumulator.requestMultiplier, accumulator.occurrences));
-                nodes.get(entry.getIntKey()).indegree++;
+                node.edges.add(new Edge(entry.getKey(), accumulator.requestMultiplier,
+                        accumulator.occurrences));
+                Node child = nodes.get(entry.getKey());
+                child.indegree++;
+                child.reachable = true;
             }
         }
 
         private int[] buildTopologicalOrder() throws Fallback, InterruptedException {
             var indegrees = new int[nodes.size()];
-            var ready = new IntArrayFIFOQueue();
+            var ready = new ArrayDeque<Integer>();
             for (Node node : nodes) {
                 indegrees[node.index] = node.indegree;
                 if (node.indegree == 0) {
-                    ready.enqueue(node.index);
+                    ready.addLast(node.index);
                 }
             }
 
@@ -791,11 +1222,11 @@ public final class OmniMaxFastPlanner {
             int position = 0;
             while (!ready.isEmpty()) {
                 checkBudget();
-                int nodeIndex = ready.dequeueInt();
+                int nodeIndex = ready.removeFirst();
                 order[position++] = nodeIndex;
                 for (Edge edge : nodes.get(nodeIndex).edges) {
-                    if (--indegrees[edge.childIndex()] == 0) {
-                        ready.enqueue(edge.childIndex());
+                    if (--indegrees[edge.childIndex] == 0) {
+                        ready.addLast(edge.childIndex);
                     }
                 }
             }
@@ -805,11 +1236,27 @@ public final class OmniMaxFastPlanner {
             return order;
         }
 
-        /// Compilation runs on AE2's crafting thread, which is parked whenever the server has spent its slice for
-        /// the tick. That waiting is not the planner being slow, so it is taken back off the budget.
+        private long countLogicalNodes(int rootIndex, int[] topologicalOrder)
+                throws InterruptedException, Fallback {
+            var occurrences = new long[nodes.size()];
+            occurrences[rootIndex] = 1;
+            long total = 0;
+            for (int nodeIndex : topologicalOrder) {
+                checkBudget();
+                long nodeOccurrences = occurrences[nodeIndex];
+                total = saturatedAdd(total, nodeOccurrences);
+                for (Edge edge : nodes.get(nodeIndex).edges) {
+                    long childOccurrences = saturatedMultiply(nodeOccurrences, edge.occurrences);
+                    occurrences[edge.childIndex] = saturatedAdd(
+                            occurrences[edge.childIndex], childOccurrences);
+                }
+            }
+            return total;
+        }
+
         private void checkBudget() throws InterruptedException, Fallback {
             long beforePause = System.nanoTime();
-            checkpoint(bridge);
+            checkpoint(pauseCheckpoint);
             long afterPause = System.nanoTime();
             long paused = Math.max(0, afterPause - beforePause);
             pausedNanos = saturatedAdd(pausedNanos, paused);
@@ -820,51 +1267,69 @@ public final class OmniMaxFastPlanner {
         }
     }
 
-    /// Why a pattern cannot be aggregated at all, or {@code null} when it can.
-    ///
-    /// The whitelist is exact-class on purpose: a subclass may reinterpret any of the methods this planner relies on.
-    @Nullable
-    private static String getPatternBarrierReason(@Nullable IPatternDetails details) {
+    private static String getPatternBarrierReason(IPatternDetails details) {
         if (details == null) {
             return "missing_pattern_details";
         }
-        Class<?> type = details.getClass();
-        if (type == AEProcessingPattern.class || type == FantasyCraftingPattern.class) {
+        if (details.getClass() == AEProcessingPattern.class) {
             return null;
         }
-        if (type == AECraftingPattern.class) {
-            // Substitution turns one input into "any of these", so which item a craft consumes depends on what the
-            // inventory holds at that moment - the one thing an aggregate cannot reproduce.
-            return ((AECraftingPattern) details).canSubstitute() ? "substitution_enabled:items" : null;
+        if (details.getClass() == AECraftingPattern.class) {
+            return null;
         }
-        return "unsupported_pattern_type:" + type.getName();
+        // The fantasy pattern has a fixed input and output list and derives every remainder from the key alone
+        // (see FantasyCraftingPattern#wearDown), so aggregation can reason about it. It does declare container
+        // items for reusable ingredients - those reach the reusable-boundary handling below like any other.
+        if (details.getClass() == FantasyCraftingPattern.class) {
+            return null;
+        }
+        return "unsupported_pattern_type:" + details.getClass().getName();
     }
 
-    /// Whether this pattern's inputs accept nothing but the key they were encoded with. Patterns that match loosely
-    /// (fantasy patterns with tag or component-insensitive ingredients) have their children re-checked against the
-    /// live inventory before execution instead.
-    private static boolean hasExactInputTemplates(IPatternDetails details) {
-        Class<?> type = details.getClass();
-        return type == AEProcessingPattern.class || type == AECraftingPattern.class;
-    }
-
-    /// Barriers that make the aggregate meaningless rather than just carving out a subtree.
     private static boolean requiresImmediateFallback(String barrierReason) {
         return "missing_pattern_details".equals(barrierReason)
-                || barrierReason.startsWith("substitution_enabled:")
                 || barrierReason.startsWith("unsupported_pattern_type:");
     }
 
-    private static void checkpoint(CalculationBridge bridge) throws InterruptedException {
+    private static GenericStack getPrimaryInputChoice(IPatternDetails.IInput input) {
+        GenericStack[] choices = input.getPossibleInputs();
+        if (choices == null || choices.length == 0) {
+            return null;
+        }
+        GenericStack first = choices[0];
+        return first == null || first.what() == null || first.amount() <= 0
+                ? null
+                : first;
+    }
+
+    private static GenericStack getSingleExactInputChoice(IPatternDetails.IInput input) {
+        GenericStack first = getPrimaryInputChoice(input);
+        if (first == null) {
+            return null;
+        }
+        GenericStack[] choices = input.getPossibleInputs();
+        for (int index = 1; index < choices.length; index++) {
+            GenericStack choice = choices[index];
+            if (choice == null || choice.what() == null || choice.amount() <= 0
+                    || choice.amount() != first.amount()
+                    || !choice.what().equals(first.what())) {
+                return null;
+            }
+        }
+        return first;
+    }
+
+    private static void checkInterrupted() throws InterruptedException {
         if (Thread.interrupted()) {
             throw new InterruptedException();
         }
-        bridge.fantasyTechnology$pause();
     }
 
-    // ------------------------------------------------------------------------
-    // Arithmetic that saturates instead of wrapping
-    // ------------------------------------------------------------------------
+    private static void checkpoint(PauseCheckpoint pauseCheckpoint)
+            throws InterruptedException {
+        checkInterrupted();
+        pauseCheckpoint.pause();
+    }
 
     private static long saturatedAdd(long left, long right) {
         if (left <= 0) {
@@ -873,57 +1338,66 @@ public final class OmniMaxFastPlanner {
         if (right <= 0) {
             return left;
         }
-        return left > Long.MAX_VALUE - right ? Long.MAX_VALUE : left + right;
+        if (left > Long.MAX_VALUE - right) {
+            return Long.MAX_VALUE;
+        }
+        return left + right;
     }
 
     private static long saturatedMultiply(long left, long right) {
         if (left <= 0 || right <= 0) {
             return 0;
         }
-        return left > Long.MAX_VALUE / right ? Long.MAX_VALUE : left * right;
+        if (left > Long.MAX_VALUE / right) {
+            return Long.MAX_VALUE;
+        }
+        return left * right;
+    }
+
+    private static long checkedAdd(long left, long right, String reason) throws Fallback {
+        if (left < 0 || right < 0 || left > Long.MAX_VALUE - right) {
+            throw new Fallback(reason);
+        }
+        return left + right;
+    }
+
+    private static long checkedMultiply(long left, long right, String reason) throws Fallback {
+        if (left < 0 || right < 0 || (right != 0 && left > Long.MAX_VALUE / right)) {
+            throw new Fallback(reason);
+        }
+        return left * right;
     }
 
     private static long ceilDiv(long value, long divisor) {
         return value / divisor + (value % divisor == 0 ? 0 : 1);
     }
 
-    // ------------------------------------------------------------------------
-    // Graph
-    // ------------------------------------------------------------------------
-
     private record NodeKey(AEKey key, long amount) {
     }
 
-    private record PendingEdge(CraftingTreeNode child, long multiplier) {
-    }
-
     private static final class Node {
-
         private final int index;
         private final AEKey key;
         private final long amount;
-        private final Level level;
-        /// Every tree node that folded into this one; the first is the representative the compiler inspected.
+        private final net.minecraft.world.level.Level level;
         private final List<CraftingTreeNode> occurrences = new ArrayList<>();
         private final List<Edge> edges = new ArrayList<>();
+        private final List<GraphReusableInput> reusableInputs = new ArrayList<>();
+        private final List<OrderedGraphInput> orderedInputs = new ArrayList<>();
         private int indegree;
         private boolean emitter;
         private boolean terminal;
+        private boolean reachable;
         private boolean barrier;
-        private boolean exactTemplates = true;
         private String barrierReason;
         private IPatternDetails details;
         private long outputPerPattern;
 
-        private Node(int index, AEKey key, long amount, Level level) {
+        private Node(int index, AEKey key, long amount, net.minecraft.world.level.Level level) {
             this.index = index;
             this.key = key;
             this.amount = amount;
             this.level = level;
-        }
-
-        private OmniCraftingTreeNodeBridge firstBridge() {
-            return (OmniCraftingTreeNodeBridge) occurrences.getFirst();
         }
     }
 
@@ -931,7 +1405,6 @@ public final class OmniMaxFastPlanner {
     }
 
     private static final class EdgeAccumulator {
-
         private long requestMultiplier;
         private int occurrences = 1;
 
@@ -940,28 +1413,63 @@ public final class OmniMaxFastPlanner {
         }
     }
 
-    private record Graph(List<Node> nodes, int[] topologicalOrder, int rootIndex, long mergedOccurrences,
-            int barrierCount) {
+    private record Graph(List<Node> nodes, int[] topologicalOrder, int rootIndex,
+            long logicalNodeCount, long mergedOccurrences, int barrierCount,
+            int orderedChoiceCount) {
+        private boolean hasOnlyUnitRequestAmounts() {
+            for (Node node : nodes) {
+                if (node.reachable && node.amount != 1) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private String executionSafetyFailure() {
+            if (!requiresTransactionalFallback()) {
+                return null;
+            }
+            if (barrierCount > 0) {
+                return "transactional_graph_with_unsafe_boundary";
+            }
+            if (mergedOccurrences > 0) {
+                return "transactional_graph_shared_context";
+            }
+            if (!hasOnlyUnitRequestAmounts()) {
+                return "transactional_graph_non_unit_request";
+            }
+            return null;
+        }
+
+        private boolean requiresNativeNodeCount() {
+            return barrierCount > 0 || requiresTransactionalFallback();
+        }
+
+        private boolean requiresTransactionalFallback() {
+            if (orderedChoiceCount > 0) {
+                return true;
+            }
+            for (Node node : nodes) {
+                if (!node.reusableInputs.isEmpty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
-    /// Control-flow signals, thrown once per rejected node during compilation. Stack traces are suppressed because
-    /// nobody reads them and filling one in per node is the single most expensive thing a rejection could do.
     private static final class Barrier extends Exception {
-
         private final String reason;
 
         private Barrier(String reason) {
-            super(null, null, false, false);
             this.reason = reason;
         }
     }
 
     private static final class Fallback extends Exception {
-
         private final String reason;
 
         private Fallback(String reason) {
-            super(null, null, false, false);
             this.reason = reason;
         }
     }

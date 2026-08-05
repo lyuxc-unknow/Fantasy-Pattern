@@ -1,13 +1,31 @@
 /*
- * Portions of this file are adapted from OmniSequence-Transfinite
- * (https://github.com/AyaYumi/OmniSequence-Transfinite),
- * Copyright (c) 2025 AyaYumi, licensed under the MIT License.
- * See THIRD_PARTY_NOTICES.md in the project root for the full license text.
+ * MIT License
+ *
+ * Copyright (c) 2026 HibikiShino and OmniSequence: Transfinite contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 package cn.lyxc.fantasytechnology.mixin;
 
 import appeng.api.crafting.IPatternDetails;
+import appeng.api.config.Actionable;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.energy.IEnergyService;
 import appeng.api.stacks.AEKey;
@@ -16,6 +34,7 @@ import appeng.crafting.execution.CraftingCpuLogic;
 import appeng.crafting.execution.ExecutingCraftingJob;
 import appeng.crafting.inv.ICraftingInventory;
 import appeng.me.service.CraftingService;
+import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.crafting.FantasyBatchExtraction;
 import cn.lyxc.fantasytechnology.integration.ae2.IFantasyBatchCraftingProvider;
@@ -29,7 +48,11 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /// Lets a crafting CPU dispatch several repetitions of one recipe in a single push.
 ///
@@ -70,6 +93,20 @@ public abstract class CraftingCpuLogicMixin {
     @Unique
     private FantasyBatchExtraction fantasyTechnology$batch;
 
+    /// Waiting-for swaps owed by batches pushed during this {@code executeCrafting} call; see
+    /// {@link FantasyBatchExtraction.RemainderCorrection}.
+    @Unique
+    private List<FantasyBatchExtraction.RemainderCorrection> fantasyTechnology$remainderCorrections;
+
+    /// Safety net for a batch whose corrections never reached the return hook - an exception unwinding out of
+    /// {@code executeCrafting} would otherwise strand the job waiting on a key nothing returns. The provider only
+    /// flushes its results on a later tick, so applying them here is still in time.
+    @Inject(method = "tickCraftingLogic", at = @At("HEAD"))
+    private void fantasyTechnology$flushStrandedCorrections(IEnergyService energyService,
+            CraftingService craftingService, CallbackInfo callback) {
+        fantasyTechnology$applyRemainderCorrections();
+    }
+
     @Inject(method = "executeCrafting", at = @At("HEAD"))
     private void fantasyTechnology$beginBatchContext(int maxPatterns, CraftingService craftingService,
             IEnergyService energyService, Level level, CallbackInfoReturnable<Integer> callback) {
@@ -80,12 +117,17 @@ public abstract class CraftingCpuLogicMixin {
         fantasyTechnology$batchedExtraCrafts = 0;
         fantasyTechnology$batchPattern = null;
         fantasyTechnology$batch = null;
+        fantasyTechnology$remainderCorrections = null;
     }
 
     /// AE2 counts one pushed pattern per push; add the repetitions that rode along inside batches so the caller
     /// subtracts the real number of crafts from its remaining operations.
+    ///
+    /// This is also the first moment at which every push of this call has been registered in the job's waiting-for
+    /// list, so it is where a batch that wore a tool down further than AE2 assumed puts the list straight.
     @ModifyReturnValue(method = "executeCrafting", at = @At("RETURN"))
     private int fantasyTechnology$reportBatchedCrafts(int pushedPatterns) {
+        fantasyTechnology$applyRemainderCorrections();
         long extra = fantasyTechnology$batchedExtraCrafts;
         fantasyTechnology$craftingService = null;
         fantasyTechnology$energyService = null;
@@ -96,6 +138,46 @@ public abstract class CraftingCpuLogicMixin {
             return pushedPatterns;
         }
         return (int) Math.min(Integer.MAX_VALUE, pushedPatterns + extra);
+    }
+
+    /// Replaces the single-craft remainders AE2 registered for a batched reusable input with what the provider will
+    /// actually hand back after the whole batch.
+    ///
+    /// Both halves are self-correcting: the amount that is really coming is inserted, and the amount AE2 assumed is
+    /// taken back out. If some other wrapper prevented AE2 from registering its assumption in the first place, the
+    /// removal simply finds nothing and the insert alone is already the right answer.
+    @Unique
+    private void fantasyTechnology$applyRemainderCorrections() {
+        var corrections = fantasyTechnology$remainderCorrections;
+        if (corrections == null || corrections.isEmpty()) {
+            fantasyTechnology$remainderCorrections = null;
+            return;
+        }
+        var currentJob = job;
+        if (currentJob == null) {
+            // No job means nothing is waiting for anything; the corrections have nowhere to go and no effect.
+            fantasyTechnology$remainderCorrections = null;
+            return;
+        }
+        var waitingFor = ((ExecutingCraftingJobAccessor) currentJob).fantasyTechnology$getWaitingFor();
+        if (waitingFor == null) {
+            // Keep them: a later tick may find the list again, and dropping them strands the job.
+            return;
+        }
+
+        fantasyTechnology$remainderCorrections = null;
+        for (var correction : corrections) {
+            if (correction.returnedKey() != null) {
+                waitingFor.insert(correction.returnedKey(), correction.amount(), Actionable.MODULATE);
+            }
+            long removed = waitingFor.extract(correction.assumedKey(), correction.amount(), Actionable.MODULATE);
+            if (removed != correction.amount() && FTConfig.DIAGNOSTICS.get()) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch: waiting-for held {} of {} x{} to swap for {}; another wrapper had already "
+                                + "changed the CPU's expectation",
+                        removed, correction.assumedKey(), correction.amount(), correction.returnedKey());
+            }
+        }
     }
 
     @WrapOperation(method = "executeCrafting", at = @At(value = "INVOKE",
@@ -110,15 +192,34 @@ public abstract class CraftingCpuLogicMixin {
         if (firstInputs == null) {
             return null;
         }
+        // When OmniSequence's own crafting-CPU mixin is installed alongside this mod and an Omni-Computation Core
+        // is on the same network, its (outer) extraction wrap has already grown the holder to N recipes before we
+        // see it. Re-expanding that would square the craft count, so a holder that already carries more than one
+        // recipe is passed through untouched.
+        if (fantasyTechnology$alreadyScaled(patternDetails, firstInputs)) {
+            return firstInputs;
+        }
 
         long maxCrafts = fantasyTechnology$plannedBatchSize(patternDetails, expectedOutputs, expectedContainerItems);
         if (maxCrafts <= 1) {
+            if (FTConfig.DIAGNOSTICS.get() && !expectedContainerItems.isEmpty()) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch: container pattern rejected by size checks (maxCrafts={}, containers={}), "
+                                + "falling back to one craft at a time",
+                        maxCrafts, expectedContainerItems);
+            }
             return firstInputs;
         }
 
         var batch = FantasyBatchExtraction.expand(patternDetails, inventory, fantasyTechnology$energyService,
-                firstInputs, expectedOutputs, expectedContainerItems, maxCrafts);
+                level, firstInputs, expectedOutputs, expectedContainerItems, maxCrafts);
         if (batch == null) {
+            if (FTConfig.DIAGNOSTICS.get() && !expectedContainerItems.isEmpty()) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch: container pattern expansion failed (maxCrafts={}, containers={}), "
+                                + "falling back to one craft at a time",
+                        maxCrafts, expectedContainerItems);
+            }
             return firstInputs;
         }
 
@@ -179,10 +280,40 @@ public abstract class CraftingCpuLogicMixin {
         if (accepted) {
             fantasyTechnology$usedOperations += crafts;
             fantasyTechnology$batchedExtraCrafts += crafts - 1;
+            if (!batch.remainderCorrections().isEmpty()) {
+                if (fantasyTechnology$remainderCorrections == null) {
+                    fantasyTechnology$remainderCorrections = new ArrayList<>();
+                }
+                fantasyTechnology$remainderCorrections.addAll(batch.remainderCorrections());
+            }
             fantasyTechnology$batchPattern = null;
             fantasyTechnology$batch = null;
         }
         return accepted;
+    }
+
+    /// True when {@code inputs} already carries more than one complete recipe: either a previous batch push of ours
+    /// or an expansion performed by OmniSequence's own crafting-CPU mixin. Either way it must not be expanded again.
+    @Unique
+    private static boolean fantasyTechnology$alreadyScaled(IPatternDetails patternDetails, KeyCounter[] inputs) {
+        var patternInputs = patternDetails.getInputs();
+        for (int i = 0; i < patternInputs.length && i < inputs.length; i++) {
+            long single = patternInputs[i].getMultiplier();
+            if (single <= 0) {
+                continue;
+            }
+            KeyCounter counter = inputs[i];
+            long total = 0;
+            if (counter != null) {
+                for (var entry : counter) {
+                    total += entry.getLongValue();
+                }
+            }
+            if (total > single) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// How many repetitions of this pattern may be dispatched at once, or {@code 0} for AE2's default behaviour.
@@ -190,41 +321,85 @@ public abstract class CraftingCpuLogicMixin {
     @Unique
     private long fantasyTechnology$plannedBatchSize(IPatternDetails patternDetails, KeyCounter expectedOutputs,
             KeyCounter expectedContainerItems) {
-        if (!FTConfig.BATCH_DISPATCH_ENABLED.get() || !expectedContainerItems.isEmpty()) {
+        // Container patterns are the rare case; with diagnostics on, log the factor values so a rejected batch can
+        // be diagnosed from the log alone (which check returned 0).
+        boolean containers = FTConfig.DIAGNOSTICS.get() && !expectedContainerItems.isEmpty();
+        if (!FTConfig.BATCH_DISPATCH_ENABLED.get()) {
+            if (containers) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch diagnose: disabled by config");
+            }
             return 0;
         }
 
+        // Note: container items (reusable crystals, worn tools) are NOT rejected here any more. The extraction
+        // plan analyses them for deterministic wear and batching proceeds when every container can serve the whole
+        // batch; otherwise the plan itself falls back to a single craft.
         long remainingOperations = fantasyTechnology$operationBudget - fantasyTechnology$usedOperations;
-        if (remainingOperations <= 1) {
+        if (remainingOperations <= 0) {
+            // No push budget left this tick. One remaining operation is enough for a batch: N crafts collapse into
+            // one push and the CPU's budget is debited by N afterwards, exactly as if they had been pushed one by
+            // one - this trades N inventory walks for one, it does not widen the tick budget.
+            if (containers) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch diagnose: no operation budget left (ops={})", remainingOperations);
+            }
             return 0;
         }
 
         var currentJob = job;
         var craftingService = fantasyTechnology$craftingService;
         if (currentJob == null || craftingService == null || fantasyTechnology$energyService == null) {
+            if (containers) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch diagnose: no job/service context (job={}, service={}, energy={})",
+                        currentJob != null, craftingService != null, fantasyTechnology$energyService != null);
+            }
             return 0;
         }
 
         var task = fantasyTechnology$findTask(patternDetails);
         if (task == null) {
+            if (containers) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch diagnose: task lookup failed for {}", patternDetails);
+            }
             return 0;
         }
         long remainingCrafts = task.fantasyTechnology$getValue();
         if (remainingCrafts <= 1) {
+            if (containers) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch diagnose: task nearly done (crafts={})", remainingCrafts);
+            }
             return 0;
         }
 
         long providerLimit = fantasyTechnology$firstProviderBatchLimit(craftingService, patternDetails);
         if (providerLimit <= 1) {
+            if (containers) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch diagnose: provider limit too small ({})", providerLimit);
+            }
             return 0;
         }
 
         long waitingLimit = fantasyTechnology$waitingForLimit(expectedOutputs);
         if (waitingLimit <= 1) {
+            if (containers) {
+                FantasyTechnology.LOGGER.info(
+                        "Fantasy batch diagnose: waiting-for headroom too small ({})", waitingLimit);
+            }
             return 0;
         }
 
-        return Math.min(Math.min(remainingOperations, remainingCrafts), Math.min(providerLimit, waitingLimit));
+        long batch = Math.min(Math.min(remainingOperations, remainingCrafts), Math.min(providerLimit, waitingLimit));
+        if (containers) {
+            FantasyTechnology.LOGGER.info(
+                    "Fantasy batch diagnose: ops={} crafts={} provider={} waiting={} batch={}",
+                    remainingOperations, remainingCrafts, providerLimit, waitingLimit, batch);
+        }
+        return batch;
     }
 
     /// The batch size offered by the provider AE2 will actually reach first - it walks providers in priority order

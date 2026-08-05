@@ -22,37 +22,27 @@
  * SOFTWARE.
  */
 
-package cn.lyxc.fantasytechnology.integration.ae2;
+package cn.lyxc.fantasytechnology.mixin;
 
-import appeng.api.crafting.IPatternDetails;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
-import appeng.crafting.CraftBranchFailure;
-import appeng.crafting.CraftingTreeProcess;
-import appeng.crafting.execution.InputTemplate;
-import appeng.crafting.inv.CraftingSimulationState;
-import appeng.crafting.inv.ICraftingInventory;
-import net.minecraft.world.level.Level;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.ArrayList;
-
-public interface OmniCraftingTreeNodeBridge {
-    AEKey fantasytechnology$getWhat();
-
-    long fantasytechnology$getAmount();
-
-    IPatternDetails.IInput fantasytechnology$getParentInput();
-
-    Level fantasytechnology$getLevel();
-
-    boolean fantasytechnology$canEmit();
-
-    ArrayList<CraftingTreeProcess> fantasytechnology$getProcesses();
-
-    void fantasytechnology$buildChildPatterns();
-
-    Iterable<InputTemplate> fantasytechnology$getValidItemTemplates(ICraftingInventory inventory);
-
-    void fantasytechnology$request(CraftingSimulationState inventory, long requestedAmount,
-            KeyCounter containerItems) throws CraftBranchFailure, InterruptedException;
+@Mixin(value = KeyCounter.class, remap = false)
+public abstract class KeyCounterMixin {
+    @Inject(method = "add", at = @At("HEAD"), cancellable = true)
+    private void fantasytechnology$saturateOverflow(AEKey key, long amount, CallbackInfo callback) {
+        var counter = (KeyCounter) (Object) this;
+        long currentAmount = counter.get(key);
+        if (amount > 0 && currentAmount > Long.MAX_VALUE - amount) {
+            counter.set(key, Long.MAX_VALUE);
+            callback.cancel();
+        } else if (amount < 0 && currentAmount < Long.MIN_VALUE - amount) {
+            counter.set(key, Long.MIN_VALUE);
+            callback.cancel();
+        }
+    }
 }

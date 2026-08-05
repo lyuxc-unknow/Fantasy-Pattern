@@ -10,23 +10,35 @@ import java.util.Set;
 
 /// Steps aside where OmniSequence-Transfinite already covers the same ground.
 ///
-/// This mod's crafting acceleration is adapted from OmniSequence, so with both installed two mixins would overlap in
-/// ways that are not merely redundant:
+/// This mod's crafting acceleration is adapted from OmniSequence, so with both installed some mixins would overlap
+/// in ways that are not merely redundant:
 ///
-/// - `CraftingCpuLogicMixin` wraps AE2's pattern extraction. Chained with OmniSequence's, whichever runs on the
-///   outside would take the other's already-expanded N-craft holder for a single craft and expand it again.
-/// - `AECraftingPatternInputMixin` is the same cache OmniSequence ships, down to the fields it adds.
+/// - `AECraftingPatternInputMixin` is the same `getRemainingKey`/`isValid` cache OmniSequence ships, down to the
+///   fields it adds.
+/// - `KeyCounterMixin` is the same overflow saturation, and two cancelling HEAD handlers on one method just race to
+///   write the same value.
 ///
-/// The aggregated planner is left alone: it triggers on this mod's own block, OmniSequence's triggers on theirs, and
-/// their wrappers nest correctly - whichever aggregates first simply never calls through to the other.
+/// `CraftingCpuLogicMixin` is deliberately *not* in that list, even though OmniSequence wraps the same extraction
+/// and push. It is what dispatches several recipes per push to the fantasy annihilation block, and OmniSequence
+/// knows nothing about {@link cn.lyxc.fantasytechnology.integration.ae2.IFantasyBatchCraftingProvider} - standing
+/// aside would silently disable batch dispatch for anyone running both mods. The cost is that the two wrappers nest,
+/// and whichever ends up on the outside sees an already-expanded holder:
+///
+/// - expanding it a second time is caught by `fantasyTechnology$alreadyScaled`, which inspects the holder rather
+///   than trusting the call order;
+/// - re-deriving the CPU's expectation from it is why a batch never rewrites `expectedContainerItems` and corrects
+///   {@code job.waitingFor} afterwards instead. An OmniSequence Omni-Computation Core does exactly that re-derive.
+///
+/// The aggregated planner is left alone too: it triggers on this mod's own patterns, OmniSequence's triggers on
+/// theirs, and their wrappers nest correctly - whichever aggregates first simply never calls through to the other.
 public class FantasyTechnologyMixinPlugin implements IMixinConfigPlugin {
 
     private static final String OMNISEQUENCE_MOD_ID = "molecularmanipulator";
     private static final String OMNISEQUENCE_MAIN_CLASS = "com.atir.molecularmanipulator.MolecularManipulator";
 
     private static final Set<String> OMNISEQUENCE_OWNED_MIXINS = Set.of(
-            "cn.lyxc.fantasytechnology.mixin.CraftingCpuLogicMixin",
-            "cn.lyxc.fantasytechnology.mixin.AECraftingPatternInputMixin");
+            "cn.lyxc.fantasytechnology.mixin.AECraftingPatternInputMixin",
+            "cn.lyxc.fantasytechnology.mixin.KeyCounterMixin");
 
     private static Boolean omniSequencePresent;
 

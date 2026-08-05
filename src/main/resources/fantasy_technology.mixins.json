@@ -12,6 +12,7 @@
     "CraftingCpuLogicMixin",
     "CraftingTaskProgressAccessor",
     "ExecutingCraftingJobAccessor",
+    "KeyCounterMixin",
     "OmniCraftingCalculationMixin",
     "OmniCraftingTreeNodeAccessor",
     "OmniCraftingTreeProcessAccessor",

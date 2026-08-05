@@ -26,6 +26,7 @@ package cn.lyxc.fantasytechnology.mixin;
 
 import appeng.api.crafting.IPatternDetails;
 import appeng.crafting.execution.ExecutingCraftingJob;
+import appeng.crafting.inv.ListCraftingInventory;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -41,4 +42,10 @@ public interface ExecutingCraftingJobAccessor {
 
     @Accessor("tasks")
     Map<IPatternDetails, Object> fantasyTechnology$getTasks();
+
+    /// Everything the job still expects to be handed back. AE2 fills it from the transient counters
+    /// `extractPatternInputs` produced, one craft at a time; a batched push has to correct the entries for
+    /// reusable inputs that come back in a different state than a single craft would leave them in.
+    @Accessor("waitingFor")
+    ListCraftingInventory fantasyTechnology$getWaitingFor();
 }

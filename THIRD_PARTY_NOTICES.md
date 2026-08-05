@@ -3,13 +3,19 @@
 ## OmniSequence-Transfinite
 
 The aggregated crafting-plan optimizer (`OmniMaxFastPlanner` and the AE2 tree
-accessors it reads through), the batch-dispatch integration (crafting CPU
+accessors it reads through), the reusable-input adapters
+(`MolecularReusableInputAdapters`), the batch-dispatch integration (crafting CPU
 extraction and push acceleration) and the `getRemainingKey`/`isValid` caches in
 this project are adapted from
 [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite),
 licensed under the **MIT License**.
 
-Every adapted source file embeds the full MIT License text in its header:
+Upstream ships three licence files. `TEMPLATE_LICENSE.txt` covers only the
+NeoForged MDK template files, which nothing here is derived from. `LICENSE`
+carries the author alone (HibikiShino, the author's alias) and `LICENSE.txt`
+carries the author together with the project's contributors. The adapted
+sources are contributed work, so the notice reproduced below - and embedded in
+the header of every adapted file - is `LICENSE.txt`, the broader of the two:
 
 ```
 MIT License

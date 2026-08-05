@@ -162,8 +162,11 @@ public class FantasyCraftingPattern implements IPatternDetails {
 
     /// One ingredient of the recipe: {@code multiplier} of it per craft, satisfied by any of {@code possible} - a
     /// single entry for an exact ingredient, everything in the tag for a tagged one.
+    ///
+    /// {@link #getRemainingKey} is {@link #wearDown}, a pure function of the key that reports null the moment the
+    /// item is used up, so the input carries {@link DeterministicWearInput}.
     private record Input(GenericStack[] possible, long multiplier, FantasyPatternData.IngredientKey key,
-            boolean reusable) implements IInput {
+            boolean reusable) implements IInput, DeterministicWearInput {
 
         @Override
         public GenericStack[] getPossibleInputs() {

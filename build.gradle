@@ -77,6 +77,7 @@ configurations {
 repositories {
     // GuideME (required AE2 dependency) is published to Maven Central
     mavenCentral()
+    mavenLocal()
     // AE2 for NeoForge 1.21.1 is published on the Modrinth Maven
     maven {
          name = 'Modrinth'
@@ -119,6 +120,7 @@ dependencies {
     // Applied Mekanistics bridges mekanism chemicals into AE2's key system; both it and mekanism are optional
     compileOnly "maven.modrinth:applied-mekanistics:${applied_mekanistics_version}"
     localRuntime "maven.modrinth:applied-mekanistics:${applied_mekanistics_version}"
+    localRuntime "com.atir.molecularmanipulator:omnisequence-transfinite:1.3.9"
     // GuideME is a required dependency of AE2 and must be present in dev runs
     localRuntime "org.appliedenergistics:guideme:${guideme_version}"
 
@@ -150,7 +152,7 @@ dependencies {
     localRuntime "curse.maven:glodium-957920:5821676"
     localRuntime "curse.maven:ex-pattern-provider-892005:8511901"
     // OmniSequence-Transfinite: kept in dev runs to verify the coexistence gate (FantasyTechnologyMixinPlugin).
-    localRuntime "curse.maven:omnisequence-transfinite-1624558:8547199"
+//    localRuntime "curse.maven:omnisequence-transfinite-1624558:8547199"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
