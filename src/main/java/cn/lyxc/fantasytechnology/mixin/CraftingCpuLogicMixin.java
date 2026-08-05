@@ -24,24 +24,32 @@
 
 package cn.lyxc.fantasytechnology.mixin;
 
-import appeng.api.crafting.IPatternDetails;
 import appeng.api.config.Actionable;
+import appeng.api.crafting.IPatternDetails;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.networking.energy.IEnergyService;
+import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
+import appeng.crafting.execution.CraftingCpuHelper;
 import appeng.crafting.execution.CraftingCpuLogic;
 import appeng.crafting.execution.ExecutingCraftingJob;
+import appeng.crafting.execution.InputTemplate;
 import appeng.crafting.inv.ICraftingInventory;
 import appeng.me.service.CraftingService;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.crafting.FantasyBatchExtraction;
+import cn.lyxc.fantasytechnology.crafting.MolecularReusableInputAdapters;
 import cn.lyxc.fantasytechnology.integration.ae2.IFantasyBatchCraftingProvider;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.Level;
+import net.neoforged.fml.loading.LoadingModList;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -67,6 +75,23 @@ import java.util.List;
 /// Everything that cannot be verified falls back to AE2's original one-craft-at-a-time behaviour.
 @Mixin(value = CraftingCpuLogic.class, remap = false)
 public abstract class CraftingCpuLogicMixin {
+
+    /// OmniSequence's scaled-pattern dispatch derives the container return chain from the
+    /// full-durability template key; worn-variant extractions would strand its waiting-for
+    /// list (items return but the job never completes). Wear fallback stands aside when it
+    /// is installed; neoecoae and stock AE2 CPUs keep full worn-durability support.
+    @Unique
+    private static final boolean FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED =
+            fantasyTechnology$isOmniSequenceLoaded();
+
+    @Unique
+    private static boolean fantasyTechnology$isOmniSequenceLoaded() {
+        try {
+            return LoadingModList.get().getModFileById("molecularmanipulator") != null;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
 
     @Shadow
     private ExecutingCraftingJob job;
@@ -189,6 +214,16 @@ public abstract class CraftingCpuLogicMixin {
         fantasyTechnology$batch = null;
 
         var firstInputs = original.call(patternDetails, inventory, level, expectedOutputs, expectedContainerItems);
+        // AE2's extraction returns null (and reinjects everything) as soon as any input cannot
+        // be satisfied by its exact (full-durability) templates. Re-extract with a worn-durability
+        // fallback for reusable inputs so crystals/tools that only exist in a worn state are
+        // actually dispatched instead of being counted by the plan and then never delivered.
+        // Skipped while OmniSequence is installed: its scaled dispatch cannot account for
+        // worn-variant return chains and the job would strand (see FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED).
+        if (firstInputs == null && !FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED) {
+            firstInputs = fantasyTechnology$extractWithWearFallback(patternDetails, inventory, level,
+                    expectedContainerItems);
+        }
         if (firstInputs == null) {
             return null;
         }
@@ -314,6 +349,109 @@ public abstract class CraftingCpuLogicMixin {
             }
         }
         return false;
+    }
+
+    /// Full re-extraction that mirrors {@code CraftingCpuHelper.extractPatternInputs}
+    /// but additionally satisfies reusable (tool/catalyst) inputs with worn durability
+    /// variants when the exact full-durability template is not in stock. AE2's own
+    /// template scan finds worn variants via {@code findFuzzyTemplates} but filters them
+    /// out with a strict {@code isValid} check; this restores them for deterministic
+    /// Damage+1 wear chains. The CPU's container loop then keeps wearing the extracted
+    /// tool down one durability per craft, matching how the plan counts its durability.
+    /// Returns {@code null} (and reinjects) when an input cannot be satisfied at all.
+    @Unique
+    private KeyCounter[] fantasyTechnology$extractWithWearFallback(IPatternDetails patternDetails,
+            ICraftingInventory inventory, Level level, KeyCounter expectedContainerItems) {
+        var patternInputs = patternDetails.getInputs();
+        KeyCounter[] inputs = new KeyCounter[patternInputs.length];
+        boolean complete = true;
+        for (int i = 0; i < patternInputs.length; i++) {
+            var input = patternInputs[i];
+            KeyCounter counter = new KeyCounter();
+            long multiplier = input.getMultiplier();
+            // AE2's exact-template scan (already filtered by its own isValid check)
+            for (InputTemplate template : CraftingCpuHelper.getValidItemTemplates(inventory, input, level)) {
+                long extracted = CraftingCpuHelper.extractTemplates(inventory, template, multiplier);
+                if (extracted > 0) {
+                    counter.add(template.key(), extracted);
+                    AEKey remainder = input.getRemainingKey(template.key());
+                    if (remainder != null) {
+                        expectedContainerItems.add(remainder, extracted);
+                    }
+                }
+            }
+            // Worn-durability fallback for reusable inputs
+            if (counter.isEmpty()) {
+                var possible = input.getPossibleInputs();
+                if (possible.length > 0) {
+                    AEKey templateKey = possible[0].what();
+                    if (input.getRemainingKey(templateKey) != null) {
+                        long amount = possible[0].amount();
+                        for (AEKey candidate : inventory.findFuzzyTemplates(templateKey)) {
+                            if (candidate.equals(templateKey)
+                                    || !fantasyTechnology$isWearVariant(templateKey, candidate)) {
+                                continue;
+                            }
+                            long got = inventory.extract(candidate, amount * multiplier, Actionable.MODULATE);
+                            if (got > 0) {
+                                counter.add(candidate, got);
+                                AEKey remainder = input.getRemainingKey(candidate);
+                                if (remainder != null) {
+                                    expectedContainerItems.add(remainder, got);
+                                }
+                                if (FTConfig.DIAGNOSTICS.get()) {
+                                    FantasyTechnology.LOGGER.info(
+                                            "Fantasy wear fallback: input {} satisfied by worn {} x{} (remaining={})",
+                                            templateKey, candidate, got,
+                                            MolecularReusableInputAdapters.remainingDurabilityCrafts(candidate));
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            inputs[i] = counter;
+            if (counter.isEmpty()) {
+                complete = false;
+            }
+        }
+        if (!complete) {
+            CraftingCpuHelper.reinjectPatternInputs(inventory, inputs);
+            return null;
+        }
+        return inputs;
+    }
+
+    /// Whether {@code candidate} is a usable worn variant of the same item as the
+    /// full-durability {@code templateKey}: same item, finite durability, no Unbreaking
+    /// (the wear chain would not be deterministic), and some durability left.
+    @Unique
+    private static boolean fantasyTechnology$isWearVariant(AEKey templateKey, AEKey candidate) {
+        if (!(templateKey instanceof AEItemKey templateItem)
+                || !(candidate instanceof AEItemKey candidateItem)) {
+            return false;
+        }
+        if (!templateItem.getItem().equals(candidateItem.getItem())) {
+            return false;
+        }
+        ItemStack templateStack = templateItem.toStack();
+        if (!templateStack.isDamageableItem() || templateStack.getMaxDamage() <= 0
+                || templateStack.has(DataComponents.UNBREAKABLE)) {
+            return false;
+        }
+        ItemStack candidateStack = candidateItem.toStack();
+        if (candidateStack.getDamageValue() <= 0 || candidateStack.has(DataComponents.UNBREAKABLE)) {
+            return false;
+        }
+        for (var enchantment : candidateStack.getEnchantments().keySet()) {
+            if (enchantment.is(Enchantments.UNBREAKING)) {
+                return false;
+            }
+        }
+        // An item at max damage is still usable exactly once (its next use destroys it),
+        // so worn crystals with 0 durability left are extracted and consumed as well.
+        return candidateStack.getDamageValue() <= candidateStack.getMaxDamage();
     }
 
     /// How many repetitions of this pattern may be dispatched at once, or {@code 0} for AE2's default behaviour.

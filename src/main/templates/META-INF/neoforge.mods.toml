@@ -66,3 +66,13 @@ Fantasy Technology
     ordering="AFTER"
     side="BOTH"
 
+# AE2-VM (LGPL-3.0 component, see THIRD_PARTY_NOTICES.md): the durable-input aware
+# crafting accelerator. Optional - without it this mod falls back to stock AE2
+# calculation plus its own aggregated planner.
+[[dependencies.fantasy_technology]]
+    modId="ae2vm"
+    type="optional"
+    versionRange="[1.8,)"
+    ordering="AFTER"
+    side="BOTH"
+

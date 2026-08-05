@@ -42,3 +42,37 @@ SOFTWARE.
 ```
 
 This project is distributed under the same MIT License.
+
+## AE2-VM
+
+The optional AE2-VM crafting accelerator (`ae2vm` mod) may be bundled with or
+loaded alongside this project. It is **not** part of this project's MIT
+license; it is a modified fork of
+[AE2-VM](https://github.com/TaoLe-si/AE2-VM), licensed under the
+**GNU Lesser General Public License v3.0** (LGPL-3.0). The full license text
+is provided in [`LICENSES/LGPL-3.0.txt`](LICENSES/LGPL-3.0.txt).
+
+The local fork is based on upstream v1.8.1 and adds, relative to upstream:
+
+- Durable-input awareness: a new `EXTRACT_DURABLE` opcode and
+  `DurableInputAdapters` that plan reusable tools/catalysts by remaining
+  durability instead of one tool per craft.
+- Worn-variant accounting: the plan lists the actual durability variants
+  present in the network inventory and only reports uncovered demand as
+  missing.
+- Diagnostics for the durable-extraction path.
+- Build hygiene: removed author-local paths/proxy settings, published to the
+  local Maven repository, AE2 resolved from the Modrinth Maven.
+
+Under LGPL-3.0 §4, this combination is a "Combined Work": the AE2-VM library
+keeps its LGPL-3.0 license, the rest of this project keeps its MIT license.
+To exercise your right to replace the LGPL component, either:
+
+- drop a separately built `ae2vm` jar into your `mods` folder (it is declared
+  as an optional dependency), or
+- unpack this jar, replace the embedded AE2-VM jar, and repack it.
+
+Modified AE2-VM source (LGPL-3.0) is available at the fork this project was
+built with:
+<https://github.com/lyuxc-unknow/AE2-VM-Fantasy-Pattern-Fork>
+
