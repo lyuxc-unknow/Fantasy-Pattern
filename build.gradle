@@ -159,7 +159,7 @@ dependencies {
     localRuntime "maven.modrinth:ldlib:mc1.21.1-2.2.32-neoforge"
     localRuntime "curse.maven:glodium-957920:5821676"
     localRuntime "curse.maven:ex-pattern-provider-892005:8511901"
-    localRuntime(jarJar("com.ae2vm.addon:ae2vm:1.8.6"))
+    localRuntime(jarJar("com.ae2vm.addon:ae2vm:1.8.22+modified"))
     localRuntime "com.atir.molecularmanipulator:omnisequence-transfinite:1.3.9"
 }
 
