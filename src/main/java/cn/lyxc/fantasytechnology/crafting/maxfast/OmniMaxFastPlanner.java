@@ -39,6 +39,7 @@ import appeng.crafting.inv.CraftingSimulationState;
 import appeng.crafting.pattern.AECraftingPattern;
 import appeng.crafting.pattern.AEProcessingPattern;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.crafting.DeterministicWearInput;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.crafting.MolecularReusableInputAdapters;
@@ -706,17 +707,13 @@ public final class OmniMaxFastPlanner {
                 continue;
             }
 
-            var analysis = MolecularReusableInputAdapters.analyze(
-                    input, template.key(), child.fantasytechnology$getLevel(),
-                    remainingPatterns);
-            if (analysis.mode()
-                    != MolecularReusableInputAdapters.Mode.DETERMINISTIC_DAMAGE
-                    || analysis.safeCrafts() <= 0) {
+            long toolCapacity = deterministicDamageCapacity(
+                    input, template.key(), child.fantasytechnology$getLevel(), remainingPatterns);
+            if (toolCapacity <= 0) {
                 return false;
             }
 
-            long groupsNeeded = ceilDiv(
-                    remainingPatterns, analysis.safeCrafts());
+            long groupsNeeded = ceilDiv(remainingPatterns, toolCapacity);
             long selectedGroups = Math.min(availableGroups, groupsNeeded);
             long toolAmount;
             try {
@@ -729,7 +726,7 @@ public final class OmniMaxFastPlanner {
             selections.add(new FiniteToolSelection(
                     template.key(), toolAmount));
             long coveredPatterns = saturatedMultiply(
-                    selectedGroups, analysis.safeCrafts());
+                    selectedGroups, toolCapacity);
             long usedPatterns = Math.min(remainingPatterns, coveredPatterns);
             remainingPatterns -= usedPatterns;
         }
@@ -737,17 +734,13 @@ public final class OmniMaxFastPlanner {
         long newToolAmount = 0;
         if (remainingPatterns > 0) {
             AEKey freshTool = child.fantasytechnology$getWhat();
-            var freshAnalysis = MolecularReusableInputAdapters.analyze(
-                    input, freshTool, child.fantasytechnology$getLevel(),
-                    remainingPatterns);
-            if (freshAnalysis.mode()
-                    != MolecularReusableInputAdapters.Mode.DETERMINISTIC_DAMAGE
-                    || freshAnalysis.safeCrafts() <= 0) {
+            long freshToolCapacity = deterministicDamageCapacity(
+                    input, freshTool, child.fantasytechnology$getLevel(), remainingPatterns);
+            if (freshToolCapacity <= 0) {
                 return false;
             }
 
-            long newToolGroups = ceilDiv(
-                    remainingPatterns, freshAnalysis.safeCrafts());
+            long newToolGroups = ceilDiv(remainingPatterns, freshToolCapacity);
             try {
                 newToolAmount = Math.multiplyExact(
                         newToolGroups, inputMultiplier);
@@ -862,6 +855,32 @@ public final class OmniMaxFastPlanner {
                 reusableInput.child.fantasytechnology$getWhat(), 1,
                 logicalUses);
         return true;
+    }
+
+    /**
+     * Returns a proven capacity for one deterministic damage input. The adapter intentionally caps each walk at
+     * MAX_DETERMINISTIC_TRANSITIONS; that capped value is only a lower bound when the chain is still alive. Fantasy
+     * inputs carry a pure wear-function marker, so their exact remaining durability is a safe capacity bound. Other
+     * recipe implementations are conservatively handed back to AE2 once the proof window is exhausted.
+     */
+    private static long deterministicDamageCapacity(IPatternDetails.IInput input, AEKey key,
+            net.minecraft.world.level.Level level, long requestedCrafts) {
+        if (requestedCrafts <= 0) {
+            return 0;
+        }
+        var analysis = MolecularReusableInputAdapters.analyze(input, key, level, requestedCrafts);
+        if (analysis.mode() != MolecularReusableInputAdapters.Mode.DETERMINISTIC_DAMAGE
+                || analysis.safeCrafts() <= 0) {
+            return 0;
+        }
+        if (analysis.safeCrafts() >= requestedCrafts || analysis.finalKey() == null) {
+            return analysis.safeCrafts();
+        }
+        if (!(input instanceof DeterministicWearInput)) {
+            return 0;
+        }
+        long durability = MolecularReusableInputAdapters.remainingDurabilityCrafts(key);
+        return durability < analysis.safeCrafts() ? 0 : Math.min(requestedCrafts, durability);
     }
 
     private static long extractTemplateMultipliers(CraftingSimulationState inventory,
@@ -1042,8 +1061,6 @@ public final class OmniMaxFastPlanner {
                                     reusableInput.child.fantasytechnology$getLevel())) {
                                 throw new Fallback("reusable_candidate_graph_conflict");
                             }
-                        } catch (Fallback fallback) {
-                            throw fallback;
                         } catch (RuntimeException exception) {
                             throw new Fallback("reusable_candidate_validation_error");
                         }

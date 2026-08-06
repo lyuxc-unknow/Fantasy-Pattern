@@ -60,6 +60,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 /// Lets a crafting CPU dispatch several repetitions of one recipe in a single push.
@@ -76,18 +77,20 @@ import java.util.List;
 @Mixin(value = CraftingCpuLogic.class, remap = false)
 public abstract class CraftingCpuLogicMixin {
 
-    /// OmniSequence's scaled-pattern dispatch derives the container return chain from the
-    /// full-durability template key; worn-variant extractions would strand its waiting-for
-    /// list (items return but the job never completes). Wear fallback stands aside when it
-    /// is installed; neoecoae and stock AE2 CPUs keep full worn-durability support.
+    /// AE2-VM can plan a returned worn variant for a non-substituting AE2 pattern, while its CPU execution still
+    /// reaches the normal AE2 extraction path. The compatibility fallback is therefore enabled only for AE2-VM;
+    /// stock AE2 and other integrations keep their native input-validity contract.
     @Unique
     private static final boolean FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED =
-            fantasyTechnology$isOmniSequenceLoaded();
+            fantasyTechnology$isModLoaded("molecularmanipulator");
+    @Unique
+    private static final boolean FANTASY_TECHNOLOGY$AE2_VM_LOADED =
+            fantasyTechnology$isModLoaded("ae2vm");
 
     @Unique
-    private static boolean fantasyTechnology$isOmniSequenceLoaded() {
+    private static boolean fantasyTechnology$isModLoaded(String modId) {
         try {
-            return LoadingModList.get().getModFileById("molecularmanipulator") != null;
+            return LoadingModList.get().getModFileById(modId) != null;
         } catch (Throwable ignored) {
             return false;
         }
@@ -220,9 +223,10 @@ public abstract class CraftingCpuLogicMixin {
         // actually dispatched instead of being counted by the plan and then never delivered.
         // Skipped while OmniSequence is installed: its scaled dispatch cannot account for
         // worn-variant return chains and the job would strand (see FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED).
-        if (firstInputs == null && !FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED) {
+        if (firstInputs == null && FANTASY_TECHNOLOGY$AE2_VM_LOADED
+                && !FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED) {
             firstInputs = fantasyTechnology$extractWithWearFallback(patternDetails, inventory, level,
-                    expectedContainerItems);
+                    expectedOutputs, expectedContainerItems);
         }
         if (firstInputs == null) {
             return null;
@@ -268,6 +272,13 @@ public abstract class CraftingCpuLogicMixin {
     private boolean fantasyTechnology$pushBatch(ICraftingProvider provider, IPatternDetails patternDetails,
             KeyCounter[] inputs, Operation<Boolean> original) {
         var batch = fantasyTechnology$batch;
+        // AE2 counts pushes, while one accepted batch represents several operations. Once a batch has spent the
+        // caller's whole allowance, reject the holders AE2 continues preparing until its own push counter catches up.
+        // AE2 reinjects every rejected holder before returning from executeCrafting.
+        if (fantasyTechnology$usedOperations >= fantasyTechnology$operationBudget) {
+            return false;
+        }
+
         boolean batched = batch != null && fantasyTechnology$batchPattern == patternDetails
                 && batch.inputs() == inputs;
         if (!batched) {
@@ -279,6 +290,9 @@ public abstract class CraftingCpuLogicMixin {
         }
 
         long crafts = batch.craftCount();
+        if (crafts > fantasyTechnology$operationBudget - fantasyTechnology$usedOperations) {
+            return false;
+        }
         // The provider that gets the push has to be the one the batch was sized against. If AE2 reached a different
         // one, refuse rather than hand an N-fold recipe to something that only promised to take a single craft; AE2
         // reinjects the whole holder and retries next tick.
@@ -361,73 +375,124 @@ public abstract class CraftingCpuLogicMixin {
     /// Returns {@code null} (and reinjects) when an input cannot be satisfied at all.
     @Unique
     private KeyCounter[] fantasyTechnology$extractWithWearFallback(IPatternDetails patternDetails,
-            ICraftingInventory inventory, Level level, KeyCounter expectedContainerItems) {
+            ICraftingInventory inventory, Level level, KeyCounter expectedOutputs,
+            KeyCounter expectedContainerItems) {
+        // AE2 leaves the container counter populated when its first extraction fails, even though it reinjects the
+        // corresponding inputs. This is a fresh attempt, so both transient counters must be rebuilt from scratch.
+        expectedOutputs.reset();
+        expectedContainerItems.reset();
+
         var patternInputs = patternDetails.getInputs();
         KeyCounter[] inputs = new KeyCounter[patternInputs.length];
-        boolean complete = true;
-        for (int i = 0; i < patternInputs.length; i++) {
-            var input = patternInputs[i];
-            KeyCounter counter = new KeyCounter();
-            long multiplier = input.getMultiplier();
-            // AE2's exact-template scan (already filtered by its own isValid check)
-            for (InputTemplate template : CraftingCpuHelper.getValidItemTemplates(inventory, input, level)) {
-                long extracted = CraftingCpuHelper.extractTemplates(inventory, template, multiplier);
-                if (extracted > 0) {
-                    counter.add(template.key(), extracted);
-                    AEKey remainder = input.getRemainingKey(template.key());
-                    if (remainder != null) {
-                        expectedContainerItems.add(remainder, extracted);
-                    }
+        try {
+            for (int i = 0; i < patternInputs.length; i++) {
+                var input = patternInputs[i];
+                KeyCounter counter = inputs[i] = new KeyCounter();
+                long remainingMultipliers = input.getMultiplier();
+                if (remainingMultipliers <= 0) {
+                    throw new IllegalStateException("Invalid pattern input multiplier");
                 }
-            }
-            // Worn-durability fallback for reusable inputs
-            if (counter.isEmpty()) {
-                var possible = input.getPossibleInputs();
-                if (possible.length > 0) {
-                    AEKey templateKey = possible[0].what();
-                    if (input.getRemainingKey(templateKey) != null) {
-                        long amount = possible[0].amount();
-                        for (AEKey candidate : inventory.findFuzzyTemplates(templateKey)) {
-                            if (candidate.equals(templateKey)
-                                    || !fantasyTechnology$isWearVariant(templateKey, candidate)) {
-                                continue;
-                            }
-                            long got = inventory.extract(candidate, amount * multiplier, Actionable.MODULATE);
-                            if (got > 0) {
-                                counter.add(candidate, got);
-                                AEKey remainder = input.getRemainingKey(candidate);
-                                if (remainder != null) {
-                                    expectedContainerItems.add(remainder, got);
-                                }
-                                if (FTConfig.DIAGNOSTICS.get()) {
-                                    FantasyTechnology.LOGGER.info(
-                                            "Fantasy wear fallback: input {} satisfied by worn {} x{} (remaining={})",
-                                            templateKey, candidate, got,
-                                            MolecularReusableInputAdapters.remainingDurabilityCrafts(candidate));
-                                }
-                                break;
-                            }
+
+                // Mirror CraftingCpuHelper exactly: extractTemplates returns template multipliers, while the holder
+                // carries template.amount() physical units. Substitutes share and decrement one remaining count.
+                for (InputTemplate template : CraftingCpuHelper.getValidItemTemplates(inventory, input, level)) {
+                    long extractedMultipliers = CraftingCpuHelper.extractTemplates(
+                            inventory, template, remainingMultipliers);
+                    if (extractedMultipliers > 0) {
+                        counter.add(template.key(), Math.multiplyExact(
+                                extractedMultipliers, template.amount()));
+                        AEKey remainder = input.getRemainingKey(template.key());
+                        if (remainder != null) {
+                            expectedContainerItems.add(remainder, extractedMultipliers);
+                        }
+                        remainingMultipliers -= extractedMultipliers;
+                        if (remainingMultipliers == 0) {
+                            break;
                         }
                     }
                 }
+
+                if (remainingMultipliers > 0) {
+                    remainingMultipliers = fantasyTechnology$extractWearVariants(
+                            input, inventory, counter, expectedContainerItems, remainingMultipliers);
+                }
+                if (remainingMultipliers != 0) {
+                    throw new IllegalStateException("Pattern input could not be fully extracted");
+                }
             }
-            inputs[i] = counter;
-            if (counter.isEmpty()) {
-                complete = false;
+
+            for (var output : patternDetails.getOutputs()) {
+                expectedOutputs.add(output.what(), output.amount());
             }
-        }
-        if (!complete) {
+            return inputs;
+        } catch (RuntimeException exception) {
             CraftingCpuHelper.reinjectPatternInputs(inventory, inputs);
+            expectedOutputs.reset();
+            expectedContainerItems.reset();
             return null;
         }
-        return inputs;
     }
 
-    /// Whether {@code candidate} is a usable worn variant of the same item as the
-    /// full-durability {@code templateKey}: same item, finite durability, no Unbreaking
-    /// (the wear chain would not be deterministic), and some durability left.
     @Unique
-    private static boolean fantasyTechnology$isWearVariant(AEKey templateKey, AEKey candidate) {
+    private static long fantasyTechnology$extractWearVariants(IPatternDetails.IInput input,
+            ICraftingInventory inventory, KeyCounter holder, KeyCounter expectedContainerItems,
+            long remainingMultipliers) {
+        var seenCandidates = new HashSet<AEKey>();
+        var possibleInputs = input.getPossibleInputs();
+        if (possibleInputs == null) {
+            return remainingMultipliers;
+        }
+
+        for (var possible : possibleInputs) {
+            if (possible == null || possible.what() == null || possible.amount() <= 0) {
+                continue;
+            }
+            AEKey templateKey = possible.what();
+            for (AEKey candidate : inventory.findFuzzyTemplates(templateKey)) {
+                if (remainingMultipliers == 0) {
+                    return 0;
+                }
+                if (candidate == null || candidate.equals(templateKey) || !seenCandidates.add(candidate)
+                        || !fantasyTechnology$isSafeWearVariant(input, templateKey, candidate)) {
+                    continue;
+                }
+
+                long requestedAmount = Math.multiplyExact(possible.amount(), remainingMultipliers);
+                long available = inventory.extract(candidate, requestedAmount, Actionable.SIMULATE);
+                long extractedMultipliers = Math.min(
+                        remainingMultipliers, available / possible.amount());
+                if (extractedMultipliers <= 0) {
+                    continue;
+                }
+                long extractedAmount = Math.multiplyExact(possible.amount(), extractedMultipliers);
+                long extracted = inventory.extract(candidate, extractedAmount, Actionable.MODULATE);
+                if (extracted != extractedAmount) {
+                    throw new IllegalStateException("Crafting inventory changed during worn-tool extraction");
+                }
+
+                holder.add(candidate, extractedAmount);
+                AEKey remainder = input.getRemainingKey(candidate);
+                if (remainder != null) {
+                    expectedContainerItems.add(remainder, extractedMultipliers);
+                }
+                remainingMultipliers -= extractedMultipliers;
+                if (FTConfig.DIAGNOSTICS.get()) {
+                    FantasyTechnology.LOGGER.info(
+                            "Fantasy wear fallback: input {} satisfied by worn {} x{} (remaining={})",
+                            templateKey, candidate, extractedAmount,
+                            MolecularReusableInputAdapters.remainingDurabilityCrafts(candidate));
+                }
+            }
+        }
+        return remainingMultipliers;
+    }
+
+    /// AE2-VM may plan a returned worn tool for a non-substituting AE2 pattern. Admit that exact case only: every
+    /// data component except DAMAGE must match the encoded template, and the real recipe remainder must be Damage+1
+    /// (or consume the final durability point). This deliberately does not relax arbitrary input validity.
+    @Unique
+    private static boolean fantasyTechnology$isSafeWearVariant(IPatternDetails.IInput input,
+            AEKey templateKey, AEKey candidate) {
         if (!(templateKey instanceof AEItemKey templateItem)
                 || !(candidate instanceof AEItemKey candidateItem)) {
             return false;
@@ -441,7 +506,10 @@ public abstract class CraftingCpuLogicMixin {
             return false;
         }
         ItemStack candidateStack = candidateItem.toStack();
-        if (candidateStack.getDamageValue() <= 0 || candidateStack.has(DataComponents.UNBREAKABLE)) {
+        if (!candidateStack.isDamageableItem()
+                || candidateStack.getDamageValue() <= templateStack.getDamageValue()
+                || candidateStack.getDamageValue() > candidateStack.getMaxDamage()
+                || candidateStack.has(DataComponents.UNBREAKABLE)) {
             return false;
         }
         for (var enchantment : candidateStack.getEnchantments().keySet()) {
@@ -449,9 +517,18 @@ public abstract class CraftingCpuLogicMixin {
                 return false;
             }
         }
-        // An item at max damage is still usable exactly once (its next use destroys it),
-        // so worn crystals with 0 durability left are extracted and consumed as well.
-        return candidateStack.getDamageValue() <= candidateStack.getMaxDamage();
+
+        ItemStack normalizedCandidate = candidateStack.copy();
+        normalizedCandidate.setDamageValue(templateStack.getDamageValue());
+        AEItemKey normalizedKey = AEItemKey.of(normalizedCandidate);
+        if (!templateItem.equals(normalizedKey)) {
+            return false;
+        }
+
+        AEKey remainder = input.getRemainingKey(candidate);
+        return remainder == null
+                ? MolecularReusableInputAdapters.remainingDurabilityCrafts(candidate) == 1
+                : MolecularReusableInputAdapters.isExactDamageStep(candidate, remainder);
     }
 
     /// How many repetitions of this pattern may be dispatched at once, or {@code 0} for AE2's default behaviour.
