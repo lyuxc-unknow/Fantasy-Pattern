@@ -81,9 +81,6 @@ public abstract class CraftingCpuLogicMixin {
     /// reaches the normal AE2 extraction path. The compatibility fallback is therefore enabled only for AE2-VM;
     /// stock AE2 and other integrations keep their native input-validity contract.
     @Unique
-    private static final boolean FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED =
-            fantasyTechnology$isModLoaded("molecularmanipulator");
-    @Unique
     private static final boolean FANTASY_TECHNOLOGY$AE2_VM_LOADED =
             fantasyTechnology$isModLoaded("ae2vm");
 
@@ -221,24 +218,13 @@ public abstract class CraftingCpuLogicMixin {
         // be satisfied by its exact (full-durability) templates. Re-extract with a worn-durability
         // fallback for reusable inputs so crystals/tools that only exist in a worn state are
         // actually dispatched instead of being counted by the plan and then never delivered.
-        // Skipped while OmniSequence is installed: its scaled dispatch cannot account for
-        // worn-variant return chains and the job would strand (see FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED).
-        if (firstInputs == null && FANTASY_TECHNOLOGY$AE2_VM_LOADED
-                && !FANTASY_TECHNOLOGY$OMNISEQUENCE_LOADED) {
+        if (firstInputs == null && FANTASY_TECHNOLOGY$AE2_VM_LOADED) {
             firstInputs = fantasyTechnology$extractWithWearFallback(patternDetails, inventory, level,
                     expectedOutputs, expectedContainerItems);
         }
         if (firstInputs == null) {
             return null;
         }
-        // When OmniSequence's own crafting-CPU mixin is installed alongside this mod and an Omni-Computation Core
-        // is on the same network, its (outer) extraction wrap has already grown the holder to N recipes before we
-        // see it. Re-expanding that would square the craft count, so a holder that already carries more than one
-        // recipe is passed through untouched.
-        if (fantasyTechnology$alreadyScaled(patternDetails, firstInputs)) {
-            return firstInputs;
-        }
-
         long maxCrafts = fantasyTechnology$plannedBatchSize(patternDetails, expectedOutputs, expectedContainerItems);
         if (maxCrafts <= 1) {
             if (FTConfig.DIAGNOSTICS.get() && !expectedContainerItems.isEmpty()) {
@@ -339,30 +325,6 @@ public abstract class CraftingCpuLogicMixin {
             fantasyTechnology$batch = null;
         }
         return accepted;
-    }
-
-    /// True when {@code inputs} already carries more than one complete recipe: either a previous batch push of ours
-    /// or an expansion performed by OmniSequence's own crafting-CPU mixin. Either way it must not be expanded again.
-    @Unique
-    private static boolean fantasyTechnology$alreadyScaled(IPatternDetails patternDetails, KeyCounter[] inputs) {
-        var patternInputs = patternDetails.getInputs();
-        for (int i = 0; i < patternInputs.length && i < inputs.length; i++) {
-            long single = patternInputs[i].getMultiplier();
-            if (single <= 0) {
-                continue;
-            }
-            KeyCounter counter = inputs[i];
-            long total = 0;
-            if (counter != null) {
-                for (var entry : counter) {
-                    total += entry.getLongValue();
-                }
-            }
-            if (total > single) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /// Full re-extraction that mirrors {@code CraftingCpuHelper.extractPatternInputs}

@@ -13,6 +13,7 @@
     "CraftingTaskProgressAccessor",
     "ExecutingCraftingJobAccessor",
     "KeyCounterMixin",
+    "OmniBatchCraftingProviderMixin",
     "OmniCraftingCalculationMixin",
     "OmniCraftingTreeNodeAccessor",
     "OmniCraftingTreeProcessAccessor",

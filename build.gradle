@@ -149,6 +149,9 @@ dependencies {
     // https://www.curseforge.com/minecraft/mc-mods/ae2-jei-integration
     localRuntime "curse.maven:ae2-jei-integration-${ae2_jei_integration_project}:${ae2_jei_integration_file}"
 
+    compileOnly "curse.maven:omnisequence-transfinite-1624558:8580768"
+    localRuntime "curse.maven:omnisequence-transfinite-1624558:8580768"
+
     // Compatibility verification
     localRuntime "maven.modrinth:modern-industrialization:2.5.5"
     localRuntime "curse.maven:alltheleaks-1091339:8553655"
@@ -160,7 +163,6 @@ dependencies {
     localRuntime "curse.maven:glodium-957920:5821676"
     localRuntime "curse.maven:ex-pattern-provider-892005:8511901"
     localRuntime(jarJar("com.ae2vm.addon:ae2vm:1.8.22+modified"))
-    localRuntime "curse.maven:omnisequence-transfinite-1624558:8580768"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
