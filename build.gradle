@@ -86,7 +86,6 @@ configurations {
 repositories {
     // GuideME (required AE2 dependency) is published to Maven Central
     mavenCentral()
-    mavenLocal()
     // AE2 for NeoForge 1.21.1 is published on the Modrinth Maven
     maven {
          name = 'Modrinth'
@@ -162,7 +161,7 @@ dependencies {
     localRuntime "maven.modrinth:ldlib:mc1.21.1-2.2.32-neoforge"
     localRuntime "curse.maven:glodium-957920:5821676"
     localRuntime "curse.maven:ex-pattern-provider-892005:8511901"
-    localRuntime(jarJar("com.ae2vm.addon:ae2vm:1.8.22+modified"))
+    localRuntime(jarJar(files("../AE2-VM/build/libs/ae2vm-1.10.1+modified.jar")))
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
