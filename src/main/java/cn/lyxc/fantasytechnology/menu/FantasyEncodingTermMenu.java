@@ -1,6 +1,7 @@
 package cn.lyxc.fantasytechnology.menu;
 
 import appeng.api.inventories.InternalInventory;
+import appeng.api.networking.IGrid;
 import appeng.api.stacks.GenericStack;
 import appeng.helpers.InventoryAction;
 import appeng.menu.SlotSemantics;
@@ -11,10 +12,13 @@ import appeng.menu.slot.AppEngSlot;
 import appeng.menu.slot.FakeSlot;
 import appeng.util.ConfigInventory;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.blockentity.FantasyDeviceAccessBlockEntity;
+import cn.lyxc.fantasytechnology.deviceaccess.DeviceAccessCheck;
 import cn.lyxc.fantasytechnology.item.FantasyBlankPatternItem;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
+import cn.lyxc.fantasytechnology.network.DeviceCatalystsPayload;
 import cn.lyxc.fantasytechnology.part.FantasyEncodingTerminalPart;
 import cn.lyxc.fantasytechnology.part.IFantasyEncodingTerminalHost;
 import net.minecraft.resources.ResourceLocation;
@@ -22,10 +26,16 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.network.PacketDistributor;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Set;
 import java.util.List;
+import java.util.Map;
 
 /// Menu of the fantasy encoding terminal, shaped like AE2's processing pattern mode.
 ///
@@ -80,6 +90,15 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
     /// Last seen contents of the encoded pattern slot, so a newly inserted pattern is decoded exactly once.
     private ItemStack lastEncodedPattern = ItemStack.EMPTY;
+
+    /// Change counter and contents of the last catalyst summary sent to the client; see {@link #syncDeviceCatalysts}.
+    private long lastCatalystVersion = Long.MIN_VALUE;
+    private Map<Item, Integer> lastSentCatalysts = Map.of();
+
+    /// Ticks between the sweeps that catch changes no inventory edit announces - a device block broken, the network
+    /// rewired. One second is far below what a player can react to and costs one walk of the device blocks.
+    private static final int CATALYST_SWEEP_TICKS = 20;
+    private int catalystSweepCooldown;
 
     public FantasyEncodingTermMenu(int id, Inventory playerInventory, IFantasyEncodingTerminalHost host) {
         // false: add the player inventory ourselves, after the encoding slots, like AE2's own pattern terminal does.
@@ -139,8 +158,61 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
                 loadPattern(current);
             }
             packIgnoreFlags();
+            syncDeviceCatalysts();
         }
         super.broadcastChanges();
+    }
+
+    /// Pushes what the network's device access blocks hold to the client, which is where the recipe transfer button
+    /// decides whether a recipe may be encoded at all.
+    ///
+    /// Rebuilt when some device access block has changed contents - walking every one of them and their 36 slots on
+    /// every tick of every open terminal would be a poor trade for data that changes when a player moves an item.
+    /// The counter is global, so an unrelated network's change costs one redundant rebuild and nothing else.
+    ///
+    /// It cannot be the only trigger, though: breaking a device block, or the terminal's own network being split or
+    /// rewired, changes the answer without any inventory changing. A slow sweep catches those. Either way the packet
+    /// only goes out when the summary really differs from the last one sent.
+    private void syncDeviceCatalysts() {
+        boolean sweep = --catalystSweepCooldown <= 0;
+        if (sweep) {
+            catalystSweepCooldown = CATALYST_SWEEP_TICKS;
+        }
+        long version = FantasyDeviceAccessBlockEntity.changeCounter();
+        if ((!sweep && version == lastCatalystVersion) || !(getPlayer() instanceof ServerPlayer serverPlayer)) {
+            return;
+        }
+        lastCatalystVersion = version;
+
+        var catalysts = FantasyDeviceAccessBlockEntity.collectCatalysts(networkGrid());
+        if (catalysts.equals(lastSentCatalysts)) {
+            return;
+        }
+        lastSentCatalysts = Map.copyOf(catalysts);
+        PacketDistributor.sendToPlayer(serverPlayer, new DeviceCatalystsPayload(lastSentCatalysts));
+    }
+
+    /// The grid this terminal is attached to, or null when it is not connected to one.
+    @Nullable
+    private IGrid networkGrid() {
+        if (!isActionHost()) {
+            return null;
+        }
+        var node = getActionHost().getActionableNode();
+        return node == null ? null : node.getGrid();
+    }
+
+    /// Whether the network may encode this recipe, decided against what its device access blocks actually hold.
+    ///
+    /// Runs the same three-step rule the client's transfer button used - config, then datapack rule, then the
+    /// four-catalyst default - so the two sides can only disagree about the contents, never about the rule.
+    public boolean allowsDeviceAccess(@Nullable ResourceLocation recipeId, @Nullable ResourceLocation categoryId,
+            Set<ResourceLocation> outputs, Collection<Item> catalysts) {
+        if (DeviceAccessCheck.unrestricted()) {
+            return true;
+        }
+        var available = FantasyDeviceAccessBlockEntity.collectCatalysts(networkGrid());
+        return DeviceAccessCheck.check(recipeId, categoryId, outputs, catalysts, available::getInt).allowed();
     }
 
     /// Copies the part's ignore-data flags into the synchronised bitset. Server side only; the client reads the

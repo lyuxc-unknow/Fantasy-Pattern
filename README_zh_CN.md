@@ -56,11 +56,12 @@
 
 - **快速合成规划**（改编自 [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite)，MIT）：当网络上存在**幻梦分子重构演算样板供应器**时，合成计算会启用"配方树聚合"规划器——递归深树（如神秘农业的层层精华合成）去重成图后一次线性遍历；只借用而不消耗工具/容器的配方走特化路径（工具只借 1 份、磨损物回收）。凡是无法证明与原版等价的部分都会交还 AE2：要么单独退化成一棵子树，要么在尚未委派任何工作之前整体放弃聚合。
 - **批量发配**：同一供应器支持一次推送多份同配方，合成 CPU 由此把 N 次库存遍历压缩成一次。吞吐量刻意保持不变——每份合成仍占用 CPU 一次操作，协处理器的加速表现与原版 AE2 完全一致。
-- 两者均为服务端配置项，位于 `fantasy_technology-server.toml`（`max_fast_mode`、`batch_dispatch_enabled`）；`diagnostics` 可输出规划器聚合/回退的原因。版权声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- 两者均为服务端配置项，位于 `fantasy_technology-server.toml`（`max_fast_mode`、`batch_dispatch_enabled`）；`diagnostics` 可输出规划器聚合/回退的原因。在本地单人存档中，也可通过 NeoForge 模组列表中幻想科技的“配置”按钮修改；远程服务器或未进入存档时配置页为只读。版权声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 - **与 OmniSequence-Transfinite 共存**：若同时安装 OmniSequence，`FantasyTechnologyMixinPlugin` 会跳过本模组的批量发配与样板输入缓存——这两项 OmniSequence 本就提供，而两层抽取包装叠在一起会把同一份配方放大两次。配方树聚合规划则照常工作：本模组以自己的方块为触发条件，OmniSequence 以它们的方块为触发条件，两层包装可以正确嵌套。
 - **现代化工业及其他机器模组**：配方转移使用 JEI 显示的数量，多数量机器配方（如 `2x 铁板`）可正确填入。
 - **AllTheLeaks**：若某模组的 `getIngredients()` 具有 AllTheLeaks 锁定的副作用，服务端会回退到显示配方而不是失败——首次发生会记录一条警告，并在本次会话内记住该配方类型。
-- **JEI tag 信息页**（`minecraft:tag_recipes/*`）与 **P2P 谐调页面**（来自 AE2-JEI-Integration 附属）被有意屏蔽转移——它们只是浏览页，并非配方。
+- **JEI tag 信息页**（`minecraft:tag_recipes/*`）与 **P2P 谐调页面**（来自 AE2-JEI-Integration 附属）默认禁止转移，因为它们只是浏览页，并非配方。可在服务端配置中通过 `blocked_jei_category_ids` 配置 category ID 列表；修改后需要退出并重新进入存档或重启游戏。
+- **设备接入数据包默认规则**覆盖原版工作站、AE2 处理类别，以及有代表性的现代化工业和 Mekanism 机器；可选模组规则使用标准 `neoforge:conditions`，未列出的类别继续使用四个 catalyst 的回退规则。数据包覆盖文件位于 `data/<namespace>/device_access/*.json`。
 
 ---
 

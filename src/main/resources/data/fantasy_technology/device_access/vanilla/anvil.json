@@ -1,0 +1,13 @@
+{
+  "categories": ["minecraft:anvil"],
+  "devices": [
+    {
+      "count": 1,
+      "matches": [
+        { "item": "minecraft:anvil" },
+        { "item": "minecraft:chipped_anvil" },
+        { "item": "minecraft:damaged_anvil" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "categories": ["minecraft:smithing"],
+  "devices": [
+    { "count": 1, "matches": { "item": "minecraft:smithing_table" } }
+  ]
+}

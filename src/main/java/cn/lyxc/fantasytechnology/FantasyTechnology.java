@@ -6,6 +6,9 @@ import appeng.api.parts.PartModels;
 import appeng.blockentity.AEBaseBlockEntity;
 import cn.lyxc.fantasytechnology.crafting.FantasyPatternDecoder;
 import cn.lyxc.fantasytechnology.config.FTConfig;
+import cn.lyxc.fantasytechnology.deviceaccess.DeviceRequirementLoader;
+import cn.lyxc.fantasytechnology.deviceaccess.DeviceRequirements;
+import cn.lyxc.fantasytechnology.network.DeviceRequirementSync;
 import cn.lyxc.fantasytechnology.network.FTPackets;
 import cn.lyxc.fantasytechnology.part.FantasyEncodingTerminalPart;
 import cn.lyxc.fantasytechnology.registry.*;
@@ -15,6 +18,10 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.AddReloadListenerEvent;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.fml.config.ModConfig;
 import org.slf4j.Logger;
 
@@ -46,12 +53,31 @@ public class FantasyTechnology {
         modEventBus.addListener(FTPackets::onRegisterPayloadHandlers);
         modEventBus.addListener(this::registerCapabilities);
         modEventBus.addListener(this::commonSetup);
+
+        // Game-bus events: the device-access rules are ordinary datapack content, loaded with /reload and pushed to
+        // players right after.
+        NeoForge.EVENT_BUS.addListener(this::addReloadListeners);
+        NeoForge.EVENT_BUS.addListener(this::syncDeviceRequirements);
+    }
+
+    private void addReloadListeners(AddReloadListenerEvent event) {
+        event.addListener(new DeviceRequirementLoader(event.getRegistryAccess(), event.getConditionContext()));
+    }
+
+    /// Fires on login and after every {@code /reload}, for every affected player - which is exactly when a client's
+    /// copy of the rules would otherwise be out of date.
+    private void syncDeviceRequirements(OnDatapackSyncEvent event) {
+        var payload = new DeviceRequirementSync(DeviceRequirements.rules());
+        event.getRelevantPlayers().forEach(player -> PacketDistributor.sendToPlayer(player, payload));
     }
 
     private void registerCapabilities(RegisterCapabilitiesEvent event) {
         // Cables connect to the annihilation block's grid node through this capability.
         event.registerBlockEntity(AECapabilities.IN_WORLD_GRID_NODE_HOST,
                 FTBlockEntities.FANTASY_ANNIHILATION.get(),
+                (blockEntity, context) -> blockEntity);
+        event.registerBlockEntity(AECapabilities.IN_WORLD_GRID_NODE_HOST,
+                FTBlockEntities.FANTASY_DEVICE_ACCESS.get(),
                 (blockEntity, context) -> blockEntity);
     }
 
@@ -61,6 +87,9 @@ public class FantasyTechnology {
             AEBaseBlockEntity.registerBlockEntityItem(
                     FTBlockEntities.FANTASY_ANNIHILATION.get(),
                     FTBlocks.FANTASY_ANNIHILATION.asItem());
+            AEBaseBlockEntity.registerBlockEntityItem(
+                    FTBlockEntities.FANTASY_DEVICE_ACCESS.get(),
+                    FTBlocks.FANTASY_DEVICE_ACCESS.asItem());
             // Lets crafting CPUs decode fantasy patterns (required for job persistence across reloads).
             PatternDetailsHelper.registerDecoder(FantasyPatternDecoder.INSTANCE);
         });

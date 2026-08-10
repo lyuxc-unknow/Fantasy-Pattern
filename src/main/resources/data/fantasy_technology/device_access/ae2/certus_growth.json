@@ -1,0 +1,6 @@
+{
+  "categories": ["ae2:certus_growth"],
+  "devices": [
+    { "count": 1, "matches": { "item": "ae2:growth_accelerator" } }
+  ]
+}

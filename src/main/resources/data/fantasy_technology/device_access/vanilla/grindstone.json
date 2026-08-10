@@ -1,0 +1,6 @@
+{
+  "categories": ["minecraft:grindstone"],
+  "devices": [
+    { "count": 1, "matches": { "item": "minecraft:grindstone" } }
+  ]
+}

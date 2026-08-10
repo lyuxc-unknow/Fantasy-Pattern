@@ -1,0 +1,21 @@
+{
+  "categories": [
+    {
+      "id": "minecraft:smelting",
+      "items": [
+        "minecraft:iron_ingot",
+        "minecraft:gold_ingot",
+        "minecraft:copper_ingot"
+      ]
+    }
+  ],
+  "devices": [
+    {
+      "count": 1,
+      "matches": [
+        { "item": "minecraft:furnace" },
+        { "item": "minecraft:blast_furnace" }
+      ]
+    }
+  ]
+}

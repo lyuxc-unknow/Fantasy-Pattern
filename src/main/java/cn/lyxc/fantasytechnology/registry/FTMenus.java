@@ -2,6 +2,7 @@ package cn.lyxc.fantasytechnology.registry;
 
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
+import cn.lyxc.fantasytechnology.menu.FantasyDeviceAccessMenu;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
@@ -23,6 +24,9 @@ public final class FTMenus {
 
     public static final DeferredHolder<MenuType<?>, MenuType<FantasyAnnihilationMenu>> FANTASY_ANNIHILATION = REGISTER
             .register("fantasy_annihilation", () -> FantasyAnnihilationMenu.TYPE);
+
+    public static final DeferredHolder<MenuType<?>, MenuType<FantasyDeviceAccessMenu>> FANTASY_DEVICE_ACCESS = REGISTER
+            .register("fantasy_device_access", () -> FantasyDeviceAccessMenu.TYPE);
 
     /// Forces class loading so the static registrations above run.
     public static void init(IEventBus bus) {

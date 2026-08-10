@@ -1,0 +1,9 @@
+{
+  "neoforge:conditions": [
+    { "type": "neoforge:mod_loaded", "modid": "mekanism" }
+  ],
+  "categories": ["mekanism:metallurgic_infusing"],
+  "devices": [
+    { "count": 1, "matches": { "item": "mekanism:metallurgic_infuser" } }
+  ]
+}

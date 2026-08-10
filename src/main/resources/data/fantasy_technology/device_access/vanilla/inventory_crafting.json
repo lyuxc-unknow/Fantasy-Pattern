@@ -1,0 +1,8 @@
+{
+  "recipes": [
+    "minecraft:iron_ingot_from_iron_block",
+    "minecraft:gold_ingot_from_gold_block",
+    "minecraft:copper_ingot_from_copper_block"
+  ],
+  "devices": []
+}

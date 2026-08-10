@@ -1,0 +1,6 @@
+{
+  "categories": ["minecraft:blasting"],
+  "devices": [
+    { "count": 1, "matches": { "item": "minecraft:blast_furnace" } }
+  ]
+}

@@ -2,6 +2,7 @@ package cn.lyxc.fantasytechnology.registry;
 
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.block.FantasyAnnihilationBlock;
+import cn.lyxc.fantasytechnology.block.FantasyDeviceAccessBlock;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
@@ -24,6 +25,10 @@ public final class FTBlocks {
     public static final DeferredBlock<FantasyAnnihilationBlock> FANTASY_ANNIHILATION = registerBlockWithItem(
             "fantasy_annihilation",
             () -> new FantasyAnnihilationBlock(machineProperties()));
+
+    public static final DeferredBlock<FantasyDeviceAccessBlock> FANTASY_DEVICE_ACCESS = registerBlockWithItem(
+            "fantasy_device_access",
+            () -> new FantasyDeviceAccessBlock(machineProperties()));
 
     private static BlockBehaviour.Properties machineProperties() {
         return BlockBehaviour.Properties.of()

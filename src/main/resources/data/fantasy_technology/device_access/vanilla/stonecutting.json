@@ -1,0 +1,6 @@
+{
+  "categories": ["minecraft:stonecutting"],
+  "devices": [
+    { "count": 1, "matches": { "item": "minecraft:stonecutter" } }
+  ]
+}

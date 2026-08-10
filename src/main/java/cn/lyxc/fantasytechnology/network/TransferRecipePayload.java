@@ -3,6 +3,7 @@ package cn.lyxc.fantasytechnology.network;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.deviceaccess.DeviceAccessCheck;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
@@ -11,6 +12,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Player;
@@ -52,20 +54,30 @@ import java.util.concurrent.ConcurrentHashMap;
 /// fills in as {@code 6x planks + 3x book} rather than nine separate slots. Results always come from the display,
 /// which sees byproducts and fluid outputs that {@code getResultItem} does not.
 @MethodsReturnNonnullByDefault
-public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<GenericStack> inputs,
-        List<GenericStack> outputs) implements CustomPacketPayload {
+public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optional<ResourceLocation> categoryId,
+        List<GenericStack> inputs, List<GenericStack> outputs, List<Item> catalysts) implements CustomPacketPayload {
 
     public static final Type<TransferRecipePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(FantasyTechnology.MODID, "transfer_recipe"));
+
+    /// Upper bound on the catalyst list, which only exists to be re-checked against the network. A recipe category
+    /// with more machines than this is not a thing; the cap is here so a hostile packet cannot make the server walk
+    /// an unbounded list.
+    private static final int MAX_CATALYSTS = 64;
 
     public static final StreamCodec<RegistryFriendlyByteBuf, TransferRecipePayload> STREAM_CODEC = StreamCodec
             .composite(
                     ByteBufCodecs.optional(ResourceLocation.STREAM_CODEC.cast()),
                     TransferRecipePayload::recipeId,
+                    ByteBufCodecs.optional(ResourceLocation.STREAM_CODEC.cast()),
+                    TransferRecipePayload::categoryId,
                     GenericStack.STREAM_CODEC.apply(ByteBufCodecs.list(FantasyPatternData.MAX_INPUTS)),
                     TransferRecipePayload::inputs,
                     GenericStack.STREAM_CODEC.apply(ByteBufCodecs.list(FantasyPatternData.MAX_OUTPUTS)),
                     TransferRecipePayload::outputs,
+                    ByteBufCodecs.<Item>registry(Registries.ITEM)
+                            .apply(ByteBufCodecs.list(MAX_CATALYSTS)),
+                    TransferRecipePayload::catalysts,
                     TransferRecipePayload::new);
 
     /// Recipe types whose ingredients could not be read; see {@link #buildIngredients}. Static and never cleared, so
@@ -83,6 +95,15 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, List<Ge
         context.enqueueWork(() -> {
             Player player = context.player();
             if (!(player.containerMenu instanceof FantasyEncodingTermMenu menu)) {
+                return;
+            }
+
+            // The client already refused to send this without the devices being present, but the network is the
+            // server's to know: run the same check again against what the device access blocks really hold. This
+            // closes the window where a block emptied between the check and the packet, and stops the gate from
+            // being a client-side courtesy.
+            if (!menu.allowsDeviceAccess(recipeId.orElse(null), categoryId.orElse(null),
+                    DeviceAccessCheck.outputItemIds(outputs), catalysts)) {
                 return;
             }
 

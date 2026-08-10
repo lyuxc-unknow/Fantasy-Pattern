@@ -1,0 +1,6 @@
+{
+  "categories": ["ae2:entropy"],
+  "devices": [
+    { "count": 1, "matches": { "item": "ae2:entropy_manipulator" } }
+  ]
+}

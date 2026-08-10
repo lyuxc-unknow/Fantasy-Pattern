@@ -1,0 +1,10 @@
+{
+  "neoforge:conditions": [
+    { "type": "neoforge:mod_loaded", "modid": "modern_industrialization" }
+  ],
+  "categories": ["modern_industrialization:steel_unpacker"],
+  "devices": [
+    { "count": 1, "matches": { "item": "modern_industrialization:steel_unpacker" } },
+    { "count": 1, "matches": { "tag": "c:chests" } }
+  ]
+}

@@ -25,6 +25,7 @@ public class FTCreativeTab {
                     output.accept(FTItems.FANTASY_PATTERN.get());
                     output.accept(FTItems.FANTASY_ENCODING_TERMINAL.get());
                     output.accept(FTBlocks.FANTASY_ANNIHILATION.get());
+                    output.accept(FTBlocks.FANTASY_DEVICE_ACCESS.get());
                 })
                 .build()
     );

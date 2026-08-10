@@ -1,0 +1,6 @@
+{
+  "categories": ["minecraft:smelting"],
+  "devices": [
+    { "count": 1, "matches": { "item": "minecraft:furnace" } }
+  ]
+}

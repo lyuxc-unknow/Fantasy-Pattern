@@ -1,0 +1,6 @@
+{
+  "categories": ["ae2:condenser"],
+  "devices": [
+    { "count": 1, "matches": { "item": "ae2:condenser" } }
+  ]
+}

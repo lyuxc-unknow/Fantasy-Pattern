@@ -1,0 +1,12 @@
+{
+  "categories": ["minecraft:campfire_cooking"],
+  "devices": [
+    {
+      "count": 1,
+      "matches": [
+        { "item": "minecraft:campfire" },
+        { "item": "minecraft:soul_campfire" }
+      ]
+    }
+  ]
+}

@@ -13,5 +13,12 @@ public final class FTPackets {
         // the only thing that still needs a packet of our own.
         registrar.playToServer(TransferRecipePayload.TYPE, TransferRecipePayload.STREAM_CODEC,
                 TransferRecipePayload::handle);
+        // The other direction: the recipe transfer button decides on the client whether the network owns the
+        // machines a recipe is made on, which it can only know if the server tells it - both what the device
+        // access blocks hold, and the datapack rules that judge them.
+        registrar.playToClient(DeviceCatalystsPayload.TYPE, DeviceCatalystsPayload.STREAM_CODEC,
+                DeviceCatalystsPayload::handle);
+        registrar.playToClient(DeviceRequirementSync.TYPE, DeviceRequirementSync.STREAM_CODEC,
+                DeviceRequirementSync::handle);
     }
 }

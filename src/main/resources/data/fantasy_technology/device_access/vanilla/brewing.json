@@ -1,0 +1,6 @@
+{
+  "categories": ["minecraft:brewing"],
+  "devices": [
+    { "count": 1, "matches": { "item": "minecraft:brewing_stand" } }
+  ]
+}

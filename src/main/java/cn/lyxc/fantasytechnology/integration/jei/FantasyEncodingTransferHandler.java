@@ -3,6 +3,9 @@ package cn.lyxc.fantasytechnology.integration.jei;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
+import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.config.FTConfig;
+import cn.lyxc.fantasytechnology.deviceaccess.DeviceAccessCheck;
 import cn.lyxc.fantasytechnology.integration.mekanism.MekanismCompat;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
@@ -20,6 +23,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -28,8 +32,10 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /// Transfers any recipe JEI can show into the fantasy encoding terminal, items and fluids alike.
 /// A fantasy pattern is a processing recipe - a bag of ingredients and a bag of results, with no notion of a grid or a
@@ -62,7 +68,9 @@ public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferH
     public IRecipeTransferError transferRecipe(FantasyEncodingTermMenu container, Object recipe,
             IRecipeSlotsView recipeSlots, Player player, boolean maxTransfer, boolean doTransfer) {
 
-        if (isBlocked(recipe)) {
+        var category = JeiRecipeCategoryIndex.categoryOf(recipe);
+        ResourceLocation categoryUid = category == null ? null : category.uid();
+        if (isBlocked(categoryUid)) {
             return helper.createUserErrorWithTooltip(
                     Component.translatable("gui.fantasy_technology.transfer_unsupported"));
         }
@@ -70,6 +78,9 @@ public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferH
         Optional<ResourceLocation> recipeId = recipe instanceof RecipeHolder<?> holder
                 ? Optional.of(holder.id())
                 : Optional.empty();
+
+        Optional<ResourceLocation> categoryId = Optional.ofNullable(categoryUid);
+        List<Item> catalysts = category == null ? List.of() : category.catalysts();
 
         List<GenericStack> inputs = read(recipeSlots, RecipeIngredientRole.INPUT, FantasyPatternData.MAX_INPUTS);
         List<GenericStack> outputs = read(recipeSlots, RecipeIngredientRole.OUTPUT, FantasyPatternData.MAX_OUTPUTS);
@@ -81,50 +92,51 @@ public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferH
                     Component.translatable("gui.fantasy_technology.transfer_unsupported"));
         }
 
+        // Unless the config waives it, encoding is gated on the network owning the machine. Checked once the results
+        // are known, because a category rule may be scoped to the item a recipe produces.
+        var verdict = DeviceAccessCheck.checkOnClient(recipeId.orElse(null), categoryId.orElse(null),
+                DeviceAccessCheck.outputItemIds(outputs), catalysts);
+        if (!verdict.allowed()) {
+            return helper.createUserErrorWithTooltip(verdict.reason());
+        }
+
         if (doTransfer) {
-            PacketDistributor.sendToServer(new TransferRecipePayload(recipeId, inputs, outputs));
+            PacketDistributor.sendToServer(
+                    new TransferRecipePayload(recipeId, categoryId, inputs, outputs, catalysts));
         }
         return null;
     }
 
-    /// Categories whose "recipes" are not actual recipes must never be transferred into a pattern. JEI's own
-    /// tag-information pages - minecraft:tag_recipes/item, minecraft:tag_recipes/block, one per registry - exist to
-    /// browse the contents of a tag, and filling a pattern from them would produce nonsense.
+    /// Categories whose "recipes" are not actual recipes must never be transferred into a pattern. The default list
+    /// covers JEI's tag-information pages and AE2's P2P attunement browser, and a server may replace or extend it.
     ///
-    /// Each category is identified by an interface or class its recipe objects implement, listed by name so this mod
-    /// still compiles against the public JEI API only. Further categories are blocked by adding their class names
-    /// here; a name that does not resolve - a JEI build that moved or removed it, or a class from a mod that is not
-    /// installed - is left out of the list, so a stale entry costs nothing.
-    ///
-    /// Resolved once: {@link #isBlocked} runs on every availability check JEI makes for the transfer button, not
-    /// only when the button is clicked.
-    private static final List<Class<?>> BLOCKED_RECIPE_CLASSES = findClasses(
-            "mezz.jei.library.plugins.jei.tags.ITagInfoRecipe",
-            "tamaized.ae2jeiintegration.integration.modules.jei.recipes.AttunementRecipe"
-    );
+    /// This is a session snapshot rather than a live view of the config. It is refreshed by the client login event,
+    /// so editing the server config cannot change an open world's transfer behaviour halfway through the session.
+    private static volatile Set<ResourceLocation> blockedCategoryIds = parseBlockedCategoryIds(
+            FTConfig.DEFAULT_BLOCKED_JEI_CATEGORY_IDS);
 
-    /// Those of {@code names} that resolve to a class at runtime, in the order given. Names that do not are skipped.
-    private static List<Class<?>> findClasses(String... names) {
-        List<Class<?>> classes = new ArrayList<>(names.length);
-        for (String name : names) {
-            try {
-                classes.add(Class.forName(name));
-            } catch (ClassNotFoundException e) {
-                // Not present in this build, so there is nothing to block on its behalf.
-            }
-        }
-        return List.copyOf(classes);
+    public static void captureBlockedCategoryIds() {
+        blockedCategoryIds = parseBlockedCategoryIds(FTConfig.BLOCKED_JEI_CATEGORY_IDS.get());
     }
 
-    /// Whether this "recipe" belongs to a category that must not be encoded; see {@link #BLOCKED_RECIPE_CLASSES}.
-    private static boolean isBlocked(Object recipe) {
-        for (Class<?> blocked : BLOCKED_RECIPE_CLASSES) {
-            // isInstance already answers false for null.
-            if (blocked.isInstance(recipe)) {
-                return true;
+    private static Set<ResourceLocation> parseBlockedCategoryIds(List<? extends String> configuredIds) {
+        Set<ResourceLocation> parsed = new LinkedHashSet<>();
+        for (String configuredId : configuredIds) {
+            ResourceLocation id = ResourceLocation.tryParse(configuredId);
+            if (id != null) {
+                parsed.add(id);
+            } else {
+                // The config spec rejects these when it can, but keep the snapshot robust against values supplied by
+                // another config implementation or an older malformed file.
+                FantasyTechnology.LOGGER.warn("Ignoring invalid blocked JEI category id: {}", configuredId);
             }
         }
-        return false;
+        return Set.copyOf(parsed);
+    }
+
+    /// Whether this recipe belongs to a category that must not be encoded.
+    private static boolean isBlocked(@Nullable ResourceLocation categoryId) {
+        return categoryId != null && blockedCategoryIds.contains(categoryId);
     }
 
     /// The stacks JEI is currently displaying for one role, as AE2 keys. Ingredient types other than items, fluids and

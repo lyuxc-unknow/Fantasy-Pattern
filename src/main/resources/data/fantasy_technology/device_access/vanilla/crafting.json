@@ -1,0 +1,6 @@
+{
+  "categories": ["minecraft:crafting"],
+  "devices": [
+    { "count": 1, "matches": { "item": "molecularmanipulator:molecular_manipulator" } }
+  ]
+}

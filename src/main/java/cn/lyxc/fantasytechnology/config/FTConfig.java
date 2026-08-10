@@ -25,7 +25,10 @@
 package cn.lyxc.fantasytechnology.config;
 
 import cn.lyxc.fantasytechnology.crafting.maxfast.OmniMaxFastMode;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
+
+import java.util.List;
 
 /// Server-side configuration for the aggregated crafting planner and batch dispatch.
 ///
@@ -43,6 +46,14 @@ public final class FTConfig {
     public static final ModConfigSpec.IntValue MAX_FAST_COMPILE_BUDGET_MS;
     public static final ModConfigSpec.BooleanValue DIAGNOSTICS;
     public static final ModConfigSpec.BooleanValue BATCH_DISPATCH_ENABLED;
+    public static final ModConfigSpec.EnumValue<DeviceAccessMode> DEVICE_ACCESS_MODE;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> BLOCKED_JEI_CATEGORY_IDS;
+
+    public static final List<String> DEFAULT_BLOCKED_JEI_CATEGORY_IDS = List.of(
+            "minecraft:tag_recipes/item",
+            "minecraft:tag_recipes/fluid",
+            "minecraft:tag_recipes/block",
+            "ae2:attunement");
 
     public static final ModConfigSpec SPEC;
 
@@ -70,6 +81,21 @@ public final class FTConfig {
                 .comment("Log why the optimizer aggregated or fell back on each crafting calculation.")
                 .translation("fantasy_technology.configuration.diagnostics")
                 .define("diagnostics", false);
+        DEVICE_ACCESS_MODE = BUILDER
+                .comment("Whether encoding a recipe in the fantasy encoding terminal requires owning the machine.",
+                        "REQUIRE_DEVICES: a recipe may only be transferred when the network's device access blocks",
+                        "hold what it needs - a rule from data/<namespace>/device_access/ if one covers",
+                        "the recipe, otherwise four of the recipe category's own catalysts.",
+                        "UNRESTRICTED: no such check; the blocks stay usable as storage.")
+                .translation("fantasy_technology.configuration.device_access_mode")
+                .defineEnum("device_access_mode", DeviceAccessMode.REQUIRE_DEVICES);
+        BLOCKED_JEI_CATEGORY_IDS = BUILDER
+                .comment("JEI recipe category ids that the fantasy encoding terminal must not transfer.",
+                        "The defaults are browse-only pages rather than real recipes.",
+                        "Changes take effect only after leaving and re-entering the world or restarting the game.")
+                .translation("fantasy_technology.configuration.blocked_jei_category_ids")
+                .defineListAllowEmpty("blocked_jei_category_ids", DEFAULT_BLOCKED_JEI_CATEGORY_IDS,
+                        value -> value instanceof String id && ResourceLocation.tryParse(id) != null);
 
         SPEC = BUILDER.build();
     }

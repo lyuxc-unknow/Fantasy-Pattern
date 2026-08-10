@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "fantasy_technology:block/fantasy_device_access",
+    "particle": "fantasy_technology:block/fantasy_device_access"
+  }
+}

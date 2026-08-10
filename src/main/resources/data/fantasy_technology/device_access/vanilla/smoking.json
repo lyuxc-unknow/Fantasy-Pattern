@@ -1,0 +1,6 @@
+{
+  "categories": ["minecraft:smoking"],
+  "devices": [
+    { "count": 1, "matches": { "item": "minecraft:smoker" } }
+  ]
+}
