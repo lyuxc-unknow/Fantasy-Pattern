@@ -38,8 +38,6 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
     private Button blockedCategoriesButton;
     private Button fuelItemsButton;
     private Button consumeFuelButton;
-    private Button resetButton;
-    private Button doneButton;
     private StringWidget statusWidget;
 
     public FantasyConfigScreen(Screen parent) {
@@ -135,14 +133,14 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         this.statusWidget = footer.addChild(new StringWidget(310, 9, CommonComponents.EMPTY, this.font).alignCenter());
 
         var buttons = footer.addChild(LinearLayout.horizontal().spacing(8));
-        this.resetButton = buttons.addChild(Button.builder(
+        Button resetButton = buttons.addChild(Button.builder(
                 Component.translatable("fantasy_technology.config.reset"), button -> resetDraft()).width(96).build());
-        this.doneButton = buttons.addChild(Button.builder(CommonComponents.GUI_DONE, button -> save()).width(96).build());
+        Button doneButton = buttons.addChild(Button.builder(CommonComponents.GUI_DONE, button -> save()).width(96).build());
         buttons.addChild(Button.builder(CommonComponents.GUI_CANCEL,
                 button -> this.minecraft.setScreen(this.lastScreen)).width(96).build());
 
-        this.resetButton.active = this.editable;
-        this.doneButton.active = this.editable;
+        resetButton.active = this.editable;
+        doneButton.active = this.editable;
         this.layout.addToFooter(footer);
     }
 

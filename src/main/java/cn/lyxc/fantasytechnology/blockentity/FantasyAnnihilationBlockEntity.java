@@ -303,7 +303,6 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     /**
      * Commits a validated OmniSequence batch to the same next-tick output queue used by a normal push.
-     *
      * OmniSequence has already extracted the complete input holder and validated the expected output counter before
      * calling this method. The block entity still checks its matter-ball balance so a stale admission cannot consume
      * materials after another request spent the available fuel.

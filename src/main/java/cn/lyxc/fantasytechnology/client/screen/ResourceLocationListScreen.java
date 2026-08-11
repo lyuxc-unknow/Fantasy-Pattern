@@ -205,5 +205,9 @@ final class ResourceLocationListScreen extends Screen {
         public @NotNull List<? extends NarratableEntry> narratables() {
             return List.of(this.input, this.remove);
         }
+
+        public ResourceLocationList getOwner() {
+            return owner;
+        }
     }
 }
