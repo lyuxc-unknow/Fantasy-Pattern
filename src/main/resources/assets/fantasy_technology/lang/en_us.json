@@ -44,7 +44,7 @@
   "fantasy_technology.config.blocked_categories": "Blocked JEI categories: %s",
   "fantasy_technology.config.blocked_categories.title": "Blocked JEI Categories",
   "fantasy_technology.config.rejoin_required": "JEI category changes apply after rejoining the world",
-  "fantasy_technology.config.local_world_only": "Server settings can only be edited in a local world",
+  "fantasy_technology.config.local_world_only": "settings can only be edited in a local world",
   "fantasy_technology.config.numeric_input": "Numeric value",
   "fantasy_technology.config.numeric_range": "Valid range: %s-%s",
   "fantasy_technology.config.invalid_range": "Enter a value from %s to %s",
