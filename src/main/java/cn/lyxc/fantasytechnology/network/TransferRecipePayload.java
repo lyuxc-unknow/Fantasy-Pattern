@@ -8,11 +8,12 @@ import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
 import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Player;
@@ -98,19 +99,43 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
                 return;
             }
 
+            RecipeHolder<?> recipeHolder = recipeId
+                    .flatMap(id -> player.level().getRecipeManager().byKey(id))
+                    .orElse(null);
+            // A packet that claims a registered recipe must resolve to that recipe on the server. Falling back to
+            // the submitted display here would let a modified client attach arbitrary data to an invented id.
+            if (recipeId.isPresent() && recipeHolder == null) {
+                return;
+            }
+
+            Recipe<?> recipe = recipeHolder == null ? null : recipeHolder.value();
+            ResourceLocation checkedCategoryId = categoryId.orElse(null);
+            Set<ResourceLocation> checkedOutputs = DeviceAccessCheck.outputItemIds(outputs);
+            if (recipe != null) {
+                ResourceLocation recipeTypeId = BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType());
+                if (checkedCategoryId != null && recipeTypeId != null
+                        && !checkedCategoryId.equals(recipeTypeId)) {
+                    return;
+                }
+                checkedCategoryId = recipeTypeId;
+
+                ItemStack serverResult = recipe.getResultItem(player.level().registryAccess());
+                if (!serverResult.isEmpty()) {
+                    checkedOutputs = Set.of(BuiltInRegistries.ITEM.getKey(serverResult.getItem()));
+                }
+            }
+
+            if (DeviceAccessCheck.isBlockedCategory(checkedCategoryId)) {
+                return;
+            }
+
             // The client already refused to send this without the devices being present, but the network is the
             // server's to know: run the same check again against what the device access blocks really hold. This
             // closes the window where a block emptied between the check and the packet, and stops the gate from
             // being a client-side courtesy.
-            if (!menu.allowsDeviceAccess(recipeId.orElse(null), categoryId.orElse(null),
-                    DeviceAccessCheck.outputItemIds(outputs), catalysts)) {
+            if (!menu.allowsDeviceAccess(recipeId.orElse(null), checkedCategoryId, checkedOutputs, catalysts)) {
                 return;
             }
-
-            Recipe<?> recipe = recipeId
-                    .flatMap(id -> player.level().getRecipeManager().byKey(id))
-                    .map(RecipeHolder::value)
-                    .orElse(null);
 
             // Merging happens before the cap, so a recipe with more slots than a pattern can hold still contributes
             // its full amount to the entry it collapses into. Durable tools (axes, hoes, ...) then have their

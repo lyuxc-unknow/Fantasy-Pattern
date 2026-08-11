@@ -20,6 +20,8 @@ import appeng.blockentity.grid.AENetworkedInvBlockEntity;
 import appeng.helpers.patternprovider.PatternContainer;
 import appeng.util.inv.AppEngInternalInventory;
 import appeng.util.inv.filter.IAEItemFilter;
+import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
 import cn.lyxc.fantasytechnology.crafting.MolecularReusableInputAdapters;
 import cn.lyxc.fantasytechnology.integration.ae2.IFantasyBatchCraftingProvider;
@@ -28,47 +30,59 @@ import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.registry.FTBlockEntities;
 import cn.lyxc.fantasytechnology.registry.FTBlocks;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
-/// The fantasy annihilation block ("幻梦寂灭"). An ME autocrafting device holding fantasy patterns:
+/// The fantasy annihilation block ("幻梦寂灭"). An ME autocrafting device holding fantasy patterns.
 ///
-/// The patterns installed here are registered with the network's crafting service (so they show up in terminals and
-/// the pattern access terminal). When a crafting CPU executes one of them, the block consumes the ingredients and
-/// inserts the result into the network instantly - no intermediate process, and it never reports busy, so a single
-/// block executes as many crafting operations per tick as the CPU requests.
+/// Unlike a normal pattern provider, the machine consumes one AE2 matter-ball charge per accepted craft (this can be
+/// disabled with {@code FTConfig.CONSUME_FUEL}). A craft completes immediately after the CPU hands over its inputs;
+/// output delivery is deferred by one network tick because AE2 registers the CPU's waiting-for counter only after
+/// {@code pushPattern} returns.
 public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         implements ICraftingProvider, PatternContainer, IGridTickable, IFantasyBatchCraftingProvider {
 
     public static final int PATTERN_SLOTS = 36;
 
-    /** Idle power draw while connected to a grid (AE/t). */
-    private static final double IDLE_POWER_USAGE = 1.0;
+    /** One visible fuel slot; partially used balls are represented by {@link #matterBallCharges}. */
+    private static final int MATTER_BALL_SLOTS = 1;
+
+    /** No idle network power is used; matter-ball fuel is the machine's only per-craft cost. */
+    private static final double IDLE_POWER_USAGE = 0.0;
 
     private final AppEngInternalInventory patternInv = new AppEngInternalInventory(this, PATTERN_SLOTS, 1);
+    private final AppEngInternalInventory matterBallInv = new AppEngInternalInventory(this, MATTER_BALL_SLOTS, 64);
 
-    /// Results that have been crafted but not yet handed to the network.
+    /// Outputs waiting for the next grid tick so the CPU has time to register its expected result.
     ///
-    /// They cannot be inserted from inside {@code pushPattern}, because the crafting CPU only registers what it is
-    /// waiting for after that call returns; see the comment there. Draining happens on the next grid tick.
+    /// They cannot be inserted inside {@code pushPattern}: the crafting CPU starts waiting for a pattern's output only
+    /// after that call returns.
     private final KeyCounter pendingOutputs = new KeyCounter();
+
+    /** Prepaid craft charges, including credits migrated from the unfinished instant-fuel implementation. */
+    private long matterBallCharges;
+    private boolean consumingMatterBallSlot;
 
     @Nullable
     private List<IPatternDetails> patternCache;
 
-    /// How many repetitions the next {@link #pushPattern} carries. Always 1 outside of a batch armed by the crafting
-    /// CPU; see {@link IFantasyBatchCraftingProvider}.
+    /// Kept for the CPU batching compatibility hook. OmniSequence may arm this for a single batched push.
     private long batchCrafts = 1;
 
     public FantasyAnnihilationBlockEntity(BlockPos pos, BlockState state) {
@@ -79,6 +93,9 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         super(type, pos, state);
 
         patternInv.setFilter(new PatternSlotFilter());
+        matterBallInv.setFilter(new FuelSlotFilter());
+        // consumableInv accepts any item by default (no filter)
+
         getMainNode()
                 .setIdlePowerUsage(IDLE_POWER_USAGE)
                 .setFlags(GridFlags.REQUIRE_CHANNEL)
@@ -90,17 +107,72 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         return patternInv;
     }
 
+    public AppEngInternalInventory getMatterBallInv() {
+        return matterBallInv;
+    }
+
+    public long getMatterBallCharges() {
+        ItemStack stack = matterBallInv.getStackInSlot(0);
+        long storedCharges = (long) stack.getCount() * craftsPerFuel(stack);
+        return Long.MAX_VALUE - matterBallCharges < storedCharges
+                ? Long.MAX_VALUE
+                : matterBallCharges + storedCharges;
+    }
+
     @Override
     public InternalInventory getInternalInventory() {
+        // Pattern inventory compatibility is retained for AE2's base persistence and pattern-access mechanisms.
         return patternInv;
+    }
+
+    @Override
+    protected InternalInventory getExposedInventoryForSide(Direction side) {
+        // Fuel slot on all sides; consumable input via the exposed API.
+        return matterBallInv;
     }
 
     @Override
     public void onChangeInventory(AppEngInternalInventory inv, int slot) {
         if (inv == patternInv) {
-            // Patterns changed: drop the cache and re-register them with the crafting service.
             patternCache = null;
             ICraftingProvider.requestUpdate(getMainNode());
+        } else if (inv == matterBallInv && !consumingMatterBallSlot) {
+            saveChanges();
+        }
+    }
+
+    private boolean canConsumeMatterBalls(long crafts) {
+        return crafts > 0 && (!FTConfig.CONSUME_FUEL.get() || getMatterBallCharges() >= crafts);
+    }
+
+    private void consumeMatterBalls(long crafts) {
+        if (!FTConfig.CONSUME_FUEL.get()) {
+            return;
+        }
+        long fromCharges = Math.min(matterBallCharges, crafts);
+        matterBallCharges -= fromCharges;
+        long remaining = crafts - fromCharges;
+        if (remaining == 0) {
+            return;
+        }
+
+        ItemStack stack = matterBallInv.getStackInSlot(0).copy();
+        int craftsPerFuel = craftsPerFuel(stack);
+        if (craftsPerFuel <= 0) {
+            throw new IllegalStateException("Fuel configuration changed during an instant craft");
+        }
+        long fuelItems = Math.floorDiv(remaining - 1, craftsPerFuel) + 1;
+        if (fuelItems > stack.getCount()) {
+            throw new IllegalStateException("Fuel balance changed during an instant craft");
+        }
+        stack.shrink(Math.toIntExact(fuelItems));
+        matterBallCharges = Math.multiplyExact(fuelItems, craftsPerFuel) - remaining;
+
+        consumingMatterBallSlot = true;
+        try {
+            matterBallInv.setItemDirect(0, stack);
+        } finally {
+            consumingMatterBallSlot = false;
         }
     }
 
@@ -125,7 +197,8 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     @Override
     public boolean pushPattern(IPatternDetails patternDetails, KeyCounter[] inputHolder) {
-        if (!(patternDetails instanceof FantasyCraftingPattern pattern)) {
+        if (!(patternDetails instanceof FantasyCraftingPattern pattern)
+                || batchCrafts < 1) {
             return false;
         }
         IGrid grid = getMainNode().getGrid();
@@ -133,82 +206,148 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
             return false;
         }
 
-        // The crafting CPU may have armed a batch: inputHolder then carries `crafts` complete recipes and the CPU is
-        // waiting for that many results. Annihilation is instant either way, so the only thing that scales is how
-        // much comes out.
-        long crafts = batchCrafts;
-        List<GenericStack> outputs = pattern.getOutputs();
-        long[] scaledOutputs = new long[outputs.size()];
-        for (int i = 0; i < scaledOutputs.length; i++) {
-            long amount = outputs.get(i).amount();
-            if (crafts > 1 && amount > Long.MAX_VALUE / crafts) {
-                return false;
+        KeyCounter stagedOutputs = new KeyCounter();
+        try {
+            long crafts = batchCrafts;
+            for (GenericStack output : pattern.getOutputs()) {
+                addChecked(stagedOutputs, output.what(), Math.multiplyExact(output.amount(), crafts));
             }
-            scaledOutputs[i] = amount * crafts;
-        }
 
-        var storage = grid.getStorageService().getInventory();
-        IActionSource source = IActionSource.ofMachine(this);
-
-        // The network must have room for the full result, otherwise refuse and let the CPU retry later. Simulating
-        // against pendingOutputs as well would be more precise, but the queue is drained every tick, so at worst we
-        // accept one tick's worth of work more than storage can take and hold it until room appears.
-        for (int i = 0; i < scaledOutputs.length; i++) {
-            AEKey what = outputs.get(i).what();
-            if (storage.insert(what, scaledOutputs[i], Actionable.SIMULATE, source) < scaledOutputs[i]) {
-                return false;
-            }
-        }
-
-        // Annihilate the ingredients, but hand back whatever a craft only wears down rather than consumes. The CPU
-        // extracted every input from the network before calling us and is already waiting for those remainders - a
-        // crystal with one more point of damage, an empty bucket - so they have to come back or the job stalls. The
-        // rest simply vanishes: emptying the counter is all it takes, since the network no longer holds it.
-        //
-        // A batch with container items carries a single reusable item (one crystal, one bucket, one damaged tool)
-        // that serves all `crafts` repetitions: it is not multiplied in the holder, and the CPU waits for exactly
-        // one worn-down result. Walking the wear chain through the same helper the batch plan used is what makes
-        // the two agree - a job waiting for a key that never comes back never finishes.
-        IPatternDetails.IInput[] patternInputs = pattern.getInputs();
-        for (int i = 0; i < inputHolder.length; i++) {
-            KeyCounter counter = inputHolder[i];
-            if (i < patternInputs.length) {
+            IPatternDetails.IInput[] patternInputs = pattern.getInputs();
+            for (int i = 0; i < inputHolder.length; i++) {
+                if (i >= patternInputs.length) {
+                    continue;
+                }
                 IPatternDetails.IInput input = patternInputs[i];
-                for (var entry : counter) {
+                for (var entry : inputHolder[i]) {
                     AEKey remaining = MolecularReusableInputAdapters.wearDownBy(input, entry.getKey(), crafts);
-                    // A null key means the item was used up along the way; nothing comes back for it.
                     if (remaining != null) {
-                        pendingOutputs.add(remaining, entry.getLongValue());
+                        addChecked(stagedOutputs, remaining, entry.getLongValue());
                     }
                 }
             }
-            counter.reset();
+
+            // Validate results and reusable-input returns before consuming a single ingredient.
+            var storage = grid.getStorageService().getInventory();
+            IActionSource source = IActionSource.ofMachine(this);
+            for (var entry : stagedOutputs) {
+                if (storage.insert(entry.getKey(), entry.getLongValue(), Actionable.SIMULATE, source)
+                        < entry.getLongValue()) {
+                    return false;
+                }
+            }
+            if (!canAppendPendingOutputs(stagedOutputs) || !canConsumeMatterBalls(crafts)) {
+                return false;
+            }
+        } catch (ArithmeticException exception) {
+            return false;
         }
 
-        // Queue the result instead of inserting it right now.
-        //
-        // The CPU only starts waiting for a pattern's outputs *after* pushPattern returns: executeCrafting calls us
-        // first and adds the expected outputs to its waitingFor list afterward. Inserting here would therefore offer
-        // each result to a CPU that is not yet expecting it, so every insert would be matched against the previous
-        // operation's expectation and the job would end up permanently one craft short.
-        for (int i = 0; i < scaledOutputs.length; i++) {
-            pendingOutputs.add(outputs.get(i).what(), scaledOutputs[i]);
+        // The CPU extracted the material before it called us. Clearing the holders accepts the job; reusable
+        // remainders and its result are delivered on the next tick, after AE2 registers what the CPU is waiting for.
+        for (KeyCounter counter : inputHolder) {
+            counter.reset();
         }
-        getMainNode().ifPresent((g, node) -> g.getTickManager().alertDevice(node));
+        pendingOutputs.addAll(stagedOutputs);
+        consumeMatterBalls(batchCrafts);
+        saveChanges();
+        wakeProcessingTick();
+        return true;
+    }
+
+    private static void addChecked(KeyCounter counter, AEKey key, long amount) {
+        if (key == null || amount <= 0 || counter.get(key) < 0 || amount > Long.MAX_VALUE - counter.get(key)) {
+            throw new ArithmeticException("Invalid or overflowing craft output");
+        }
+        counter.add(key, amount);
+    }
+
+    private boolean canAppendPendingOutputs(KeyCounter additions) {
+        for (var entry : additions) {
+            long queued = pendingOutputs.get(entry.getKey());
+            if (queued < 0 || entry.getLongValue() > Long.MAX_VALUE - queued) {
+                return false;
+            }
+        }
         return true;
     }
 
     // ------------------------------------------------------------------------
-    // IFantasyBatchCraftingProvider: several recipes per push
+    // IFantasyBatchCraftingProvider: several instant recipes per push
     // ------------------------------------------------------------------------
 
-    /// Annihilation has no internal capacity and never reports busy, so any number of repetitions is acceptable; the
-    /// crafting CPU's own operation budget is what actually sizes a batch.
     @Override
     public long fantasyTechnology$batchLimit(IPatternDetails patternDetails) {
-        return patternDetails instanceof FantasyCraftingPattern && getMainNode().getGrid() != null
-                ? Long.MAX_VALUE
-                : 0;
+        if (!(patternDetails instanceof FantasyCraftingPattern pattern) || getMainNode().getGrid() == null) {
+            return 0;
+        }
+        return getMaxBatchCrafts(pattern, Long.MAX_VALUE);
+    }
+
+    public long getMaxBatchCrafts(FantasyCraftingPattern pattern, long requestedCrafts) {
+        long limit = Math.min(Math.max(0, requestedCrafts),
+                FTConfig.CONSUME_FUEL.get() ? getMatterBallCharges() : Long.MAX_VALUE);
+        try {
+            for (GenericStack output : pattern.getOutputs()) {
+                long queued = pendingOutputs.get(output.what());
+                if (queued < 0 || output.amount() <= 0) {
+                    return 0;
+                }
+                limit = Math.min(limit, (Long.MAX_VALUE - queued) / output.amount());
+            }
+            return limit;
+        } catch (ArithmeticException exception) {
+            return 0;
+        }
+    }
+
+    /**
+     * Commits a validated OmniSequence batch to the same next-tick output queue used by a normal push.
+     *
+     * OmniSequence has already extracted the complete input holder and validated the expected output counter before
+     * calling this method. The block entity still checks its matter-ball balance so a stale admission cannot consume
+     * materials after another request spent the available fuel.
+     */
+    public boolean acceptOmniBatch(KeyCounter stagedOutputs, long crafts) {
+        IGrid grid = getMainNode().getGrid();
+        if (crafts < 2 || stagedOutputs == null || stagedOutputs.isEmpty()
+                || grid == null || !canConsumeMatterBalls(crafts) || !canAppendPendingOutputs(stagedOutputs)) {
+            return false;
+        }
+        long previousCharges = matterBallCharges;
+        ItemStack previousMatterBalls = matterBallInv.getStackInSlot(0).copy();
+        KeyCounter previousOutputs = new KeyCounter();
+        previousOutputs.addAll(pendingOutputs);
+        boolean queued = false;
+        try {
+            KeyCounter checked = new KeyCounter();
+            for (var entry : stagedOutputs) {
+                addChecked(checked, entry.getKey(), entry.getLongValue());
+            }
+            queued = true;
+            pendingOutputs.addAll(checked);
+            consumeMatterBalls(crafts);
+            saveChanges();
+            wakeProcessingTick();
+            return true;
+        } catch (RuntimeException exception) {
+            // The admission is still rejectable until it returns. Restore the queue and fuel state so OmniSequence
+            // can safely reinject the inputs.
+            if (queued) {
+                pendingOutputs.reset();
+                pendingOutputs.addAll(previousOutputs);
+                matterBallCharges = previousCharges;
+                consumingMatterBallSlot = true;
+                try {
+                    matterBallInv.setItemDirect(0, previousMatterBalls);
+                } catch (RuntimeException ignored) {
+                    // Preserve the original failure as the admission result.
+                } finally {
+                    consumingMatterBallSlot = false;
+                }
+            }
+            return false;
+        }
     }
 
     @Override
@@ -221,35 +360,8 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         batchCrafts = 1;
     }
 
-    /// Pushes queued results into the network. Runs on the tick after the craft was pushed, by which point the
-    /// crafting CPU is waiting for them and will claim them as completed operations.
-    private void flushPendingOutputs() {
-        IGrid grid = getMainNode().getGrid();
-        if (grid == null || pendingOutputs.isEmpty()) {
-            return;
-        }
-
-        var storage = grid.getStorageService().getInventory();
-        IActionSource source = IActionSource.ofMachine(this);
-
-        // Drain into a snapshot first: inserting notifies the crafting CPU, and anything that ends up queueing more
-        // results while we are inside the loop must not mutate the collection we are iterating.
-        KeyCounter batch = new KeyCounter();
-        batch.addAll(pendingOutputs);
-        pendingOutputs.reset();
-
-        for (var entry : batch) {
-            long amount = entry.getLongValue();
-            long inserted = storage.insert(entry.getKey(), amount, Actionable.MODULATE, source);
-            // Storage filled up in the meantime; keep the rest and retry on a later tick.
-            if (inserted < amount) {
-                pendingOutputs.add(entry.getKey(), amount - inserted);
-            }
-        }
-    }
-
     // ------------------------------------------------------------------------
-    // IGridTickable: drains the queued results
+    // IGridTickable: hands instant-craft outputs to ME storage after pushPattern returns
     // ------------------------------------------------------------------------
 
     @Override
@@ -263,6 +375,48 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         return pendingOutputs.isEmpty() ? TickRateModulation.SLEEP : TickRateModulation.URGENT;
     }
 
+    /** Wakes both a sleeping and an alertable AE2 tick tracker; the block ticker remains the final fallback. */
+    private void wakeProcessingTick() {
+        getMainNode().ifPresent((grid, node) -> {
+            try {
+                grid.getTickManager().wakeDevice(node);
+            } catch (RuntimeException exception) {
+                FantasyTechnology.LOGGER.debug("Unable to wake fantasy annihilation tick tracker", exception);
+            }
+            try {
+                grid.getTickManager().alertDevice(node);
+            } catch (RuntimeException exception) {
+                FantasyTechnology.LOGGER.debug("Unable to alert fantasy annihilation tick tracker", exception);
+            }
+        });
+    }
+
+    private void flushPendingOutputs() {
+        IGrid grid = getMainNode().getGrid();
+        if (grid == null || pendingOutputs.isEmpty()) {
+            return;
+        }
+
+        var storage = grid.getStorageService().getInventory();
+        IActionSource source = IActionSource.ofMachine(this);
+
+        // Insertion can notify the CPU and make it queue another operation, so do not iterate the mutable queue.
+        KeyCounter batch = new KeyCounter();
+        batch.addAll(pendingOutputs);
+        pendingOutputs.reset();
+
+        for (var entry : batch) {
+            long amount = entry.getLongValue();
+            long inserted = storage.insert(entry.getKey(), amount, Actionable.MODULATE, source);
+            if (inserted < amount) {
+                pendingOutputs.add(entry.getKey(), amount - inserted);
+            }
+        }
+        // The queued state may already have been persisted. Mark its removal/reduction so a later reload cannot
+        // restore outputs that were successfully delivered to storage.
+        saveChanges();
+    }
+
     // ------------------------------------------------------------------------
     // Persistence
     // ------------------------------------------------------------------------
@@ -270,34 +424,71 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        // The queue normally lives for a single tick, but it must survive an unload in between so that a craft in
-        // flight is not silently destroyed.
-        if (!pendingOutputs.isEmpty()) {
-            ListTag list = new ListTag();
-            for (var entry : pendingOutputs) {
-                list.add(GenericStack.writeTag(registries, new GenericStack(entry.getKey(), entry.getLongValue())));
-            }
-            tag.put("pendingOutputs", list);
+        matterBallInv.writeToNBT(tag, "matterBallInv", registries);
+        if (matterBallCharges > 0) {
+            tag.putLong("matterBallCharges", matterBallCharges);
+        } else {
+            tag.remove("matterBallCharges");
         }
+        writeCounter(tag, "pendingOutputs", pendingOutputs, registries);
     }
 
     @Override
     public void loadTag(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadTag(tag, registries);
-        pendingOutputs.reset();
-        ListTag list = tag.getList("pendingOutputs", Tag.TAG_COMPOUND);
+        consumingMatterBallSlot = true;
+        try {
+            matterBallInv.readFromNBT(tag, "matterBallInv", registries);
+        } finally {
+            consumingMatterBallSlot = false;
+        }
+        matterBallCharges = Math.max(0, tag.getLong("matterBallCharges"));
+        readCounter(tag, "pendingOutputs", pendingOutputs, registries);
+        // Complete any in-flight delayed craft from older saves immediately after the format change.
+        KeyCounter legacyProcessing = new KeyCounter();
+        readCounter(tag, "processingOutputs", legacyProcessing, registries);
+        pendingOutputs.addAll(legacyProcessing);
+    }
+
+    private static void writeCounter(CompoundTag tag, String name, KeyCounter counter, HolderLookup.Provider registries) {
+        if (counter.isEmpty()) {
+            tag.remove(name);
+            return;
+        }
+        ListTag list = new ListTag();
+        for (var entry : counter) {
+            list.add(GenericStack.writeTag(registries, new GenericStack(entry.getKey(), entry.getLongValue())));
+        }
+        tag.put(name, list);
+    }
+
+    private static void readCounter(CompoundTag tag, String name, KeyCounter counter, HolderLookup.Provider registries) {
+        counter.reset();
+        ListTag list = tag.getList(name, Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
             GenericStack stack = GenericStack.readTag(registries, list.getCompound(i));
-            if (stack != null) {
-                pendingOutputs.add(stack.what(), stack.amount());
+            if (stack != null && stack.amount() > 0) {
+                counter.add(stack.what(), stack.amount());
             }
         }
     }
 
     @Override
     public boolean isBusy() {
-        // Crafting is instant, so the block always accepts new work.
+        // Crafting itself is instant. The next-tick delivery queue does not throttle further pushes.
         return false;
+    }
+
+    @Override
+    public void onReady() {
+        super.onReady();
+        if (level != null && !level.isClientSide() && !pendingOutputs.isEmpty()) {
+            wakeProcessingTick();
+        }
+    }
+
+    public boolean isWaitingForGrid() {
+        return getMainNode().getGrid() == null;
     }
 
     // ------------------------------------------------------------------------
@@ -326,17 +517,43 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         return new PatternContainerGroup(AEItemKey.of(FTBlocks.FANTASY_ANNIHILATION.get()), name, List.of());
     }
 
-    // ------------------------------------------------------------------------
-    // Multiblock (reserved)
-    // ------------------------------------------------------------------------
-
-    /// Whether the surrounding multiblock structure is complete. Reserved for a future multiblock layout - for now the
-    /// structure is always considered formed, so the block works standalone exactly like before.
+    /// Whether the surrounding multiblock structure is complete. Reserved for a future multiblock layout.
     public boolean isStructureFormed() {
         return true;
     }
 
-    /// Only fantasy patterns may be placed into pattern slots.
+    /// Whether an item stack is a configured fuel item (matter ball by default).
+    private static boolean isFuelItem(ItemStack stack) {
+        return craftsPerFuel(stack) > 0;
+    }
+
+    /// Number of crafts supplied by one item in this stack, or zero when it is not configured as fuel.
+    private static int craftsPerFuel(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return 0;
+        }
+        return getFuelCrafts().getOrDefault(BuiltInRegistries.ITEM.getKey(stack.getItem()), 0);
+    }
+
+    /// Fuel values are rebuilt on every call because the server config may change without a world reload.
+    private static Map<ResourceLocation, Integer> getFuelCrafts() {
+        Map<ResourceLocation, Integer> fuels = new LinkedHashMap<>();
+        for (String configured : FTConfig.ANNIHILATION_FUEL_ITEMS.get()) {
+            FTConfig.AnnihilationFuel fuel = FTConfig.parseAnnihilationFuel(configured);
+            if (fuel != null) {
+                fuels.put(fuel.itemId(), fuel.crafts());
+            }
+        }
+        if (fuels.isEmpty()) {
+            FTConfig.AnnihilationFuel fallback = FTConfig.parseAnnihilationFuel(
+                    FTConfig.DEFAULT_ANNIHILATION_FUEL_ITEMS.getFirst());
+            if (fallback != null) {
+                fuels.put(fallback.itemId(), fallback.crafts());
+            }
+        }
+        return fuels;
+    }
+
     private static class PatternSlotFilter implements IAEItemFilter {
         @Override
         public boolean allowInsert(InternalInventory inv, int slot, ItemStack stack) {
@@ -348,4 +565,17 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
             return true;
         }
     }
+
+    private static class FuelSlotFilter implements IAEItemFilter {
+        @Override
+        public boolean allowInsert(InternalInventory inv, int slot, ItemStack stack) {
+            return isFuelItem(stack);
+        }
+
+        @Override
+        public boolean allowExtract(InternalInventory inv, int slot, int amount) {
+            return true;
+        }
+    }
+
 }

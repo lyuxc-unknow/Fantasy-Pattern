@@ -27,6 +27,7 @@ package cn.lyxc.fantasytechnology.config;
 import cn.lyxc.fantasytechnology.crafting.maxfast.OmniMaxFastMode;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -48,12 +49,18 @@ public final class FTConfig {
     public static final ModConfigSpec.BooleanValue BATCH_DISPATCH_ENABLED;
     public static final ModConfigSpec.EnumValue<DeviceAccessMode> DEVICE_ACCESS_MODE;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> BLOCKED_JEI_CATEGORY_IDS;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> ANNIHILATION_FUEL_ITEMS;
+    public static final ModConfigSpec.BooleanValue CONSUME_FUEL;
 
     public static final List<String> DEFAULT_BLOCKED_JEI_CATEGORY_IDS = List.of(
             "minecraft:tag_recipes/item",
             "minecraft:tag_recipes/fluid",
             "minecraft:tag_recipes/block",
             "ae2:attunement");
+    public static final List<String> DEFAULT_ANNIHILATION_FUEL_ITEMS = List.of("ae2:matter_ball:100000");
+
+    public record AnnihilationFuel(ResourceLocation itemId, int crafts) {
+    }
 
     public static final ModConfigSpec SPEC;
 
@@ -72,9 +79,9 @@ public final class FTConfig {
                 .translation("fantasy_technology.configuration.max_fast_compile_budget_ms")
                 .defineInRange("max_fast_compile_budget_ms", 100, 1, 5000);
         BATCH_DISPATCH_ENABLED = BUILDER
-                .comment("Dispatch several repetitions of one recipe to the fantasy annihilation block in a single",
-                        "push. Throughput is unchanged - the crafting CPU still spends one operation per craft -",
-                        "but the per-craft inventory walk is done once instead of N times.")
+                .comment("When OmniSequence is installed, allow several repetitions of one recipe to enter the",
+                        "fantasy annihilation in one concurrent batch. Without OmniSequence the normal serialized",
+                        "AE2 path is retained. Changes require re-entering the world or restarting the game.")
                 .translation("fantasy_technology.configuration.batch_dispatch_enabled")
                 .define("batch_dispatch_enabled", true);
         DIAGNOSTICS = BUILDER
@@ -96,7 +103,47 @@ public final class FTConfig {
                 .translation("fantasy_technology.configuration.blocked_jei_category_ids")
                 .defineListAllowEmpty("blocked_jei_category_ids", DEFAULT_BLOCKED_JEI_CATEGORY_IDS,
                         value -> value instanceof String id && ResourceLocation.tryParse(id) != null);
+        ANNIHILATION_FUEL_ITEMS = BUILDER
+                .comment("Fuel accepted by the fantasy annihilation block, formatted as <item id>:<crafts>.",
+                        "The final colon separates the item id from its positive craft count.",
+                        "Changes apply immediately to newly inserted fuel; existing charges are unchanged.",
+                        "Default: [\"ae2:matter_ball:100000\"]")
+                .translation("fantasy_technology.configuration.annihilation_fuel_items")
+                .defineListAllowEmpty("annihilation_fuel_items", DEFAULT_ANNIHILATION_FUEL_ITEMS,
+                        value -> value instanceof String entry && parseAnnihilationFuel(entry) != null);
+        CONSUME_FUEL = BUILDER
+                .comment("Whether the fantasy annihilation block consumes matter-ball fuel (or other configured",
+                        "fuel items) on each craft. When false the machine crafts for free: the fuel slot keeps",
+                        "storing items and prepaid charges are never touched. Changes take effect immediately.")
+                .translation("fantasy_technology.configuration.consume_fuel")
+                .define("consume_fuel", true);
 
         SPEC = BUILDER.build();
+    }
+
+    /// Parses {@code namespace:item_path:craft_count}; the final colon is the separator because item ids already
+    /// contain one between their namespace and path.
+    public static @Nullable AnnihilationFuel parseAnnihilationFuel(String configured) {
+        String value = configured.trim();
+        int separator = value.lastIndexOf(':');
+        if (separator <= 0 || separator == value.length() - 1) {
+            return null;
+        }
+
+        ResourceLocation itemId = ResourceLocation.tryParse(value.substring(0, separator).trim());
+        if (itemId == null) {
+            return null;
+        }
+        try {
+            int crafts = Integer.parseInt(value.substring(separator + 1).trim());
+            return crafts > 0 ? new AnnihilationFuel(itemId, crafts) : null;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    public static @Nullable String normalizeAnnihilationFuel(String configured) {
+        AnnihilationFuel fuel = parseAnnihilationFuel(configured);
+        return fuel == null ? null : fuel.itemId() + ":" + fuel.crafts();
     }
 }

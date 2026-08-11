@@ -15,9 +15,7 @@ import com.atir.molecularmanipulator.api.crafting.OmniBatchProbe;
 import com.atir.molecularmanipulator.api.crafting.OmniBatchRequest;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
 /// OmniSequence's public batch-provider SPI for the fantasy annihilation block.
@@ -26,10 +24,6 @@ import org.spongepowered.asm.mixin.Unique;
 /// entity itself is important: the normal mod must still load without OmniSequence on the classpath.
 @Mixin(value = FantasyAnnihilationBlockEntity.class, remap = false)
 public abstract class OmniBatchCraftingProviderMixin implements OmniBatchCraftingProvider {
-
-    @Shadow
-    @Final
-    private KeyCounter pendingOutputs;
 
     @Nullable
     @Override
@@ -92,27 +86,10 @@ public abstract class OmniBatchCraftingProviderMixin implements OmniBatchCraftin
         }
     }
 
-    /// The queued result is persisted with the block entity, so network storage capacity is deliberately not part
-    /// of this admission. The only hard limit is representability in the persistent key counter.
+    /// Fuel and persistent-counter capacity bound an admission; both are rechecked when the delivery commits.
     @Unique
     private long fantasyTechnology$queueCraftLimit(FantasyCraftingPattern pattern, long requestedMaxCrafts) {
-        KeyCounter outputPerCraft = new KeyCounter();
-        try {
-            for (GenericStack output : pattern.getOutputs()) {
-                fantasyTechnology$addChecked(outputPerCraft, output.what(), output.amount());
-            }
-            long limit = requestedMaxCrafts;
-            for (var entry : outputPerCraft) {
-                long queued = pendingOutputs.get(entry.getKey());
-                if (queued < 0) {
-                    return 0;
-                }
-                limit = Math.min(limit, (Long.MAX_VALUE - queued) / entry.getLongValue());
-            }
-            return limit;
-        } catch (RuntimeException exception) {
-            return 0;
-        }
+        return fantasyTechnology$self().getMaxBatchCrafts(pattern, requestedMaxCrafts);
     }
 
     @Unique
@@ -141,28 +118,9 @@ public abstract class OmniBatchCraftingProviderMixin implements OmniBatchCraftin
                 return OmniBatchDelivery.RejectReason.UNSUPPORTED_INPUT;
             }
 
-            KeyCounter previous = new KeyCounter();
-            previous.addAll(pendingOutputs);
-            KeyCounter replacement = new KeyCounter();
-            replacement.addAll(previous);
-            for (var entry : staged) {
-                fantasyTechnology$addChecked(replacement, entry.getKey(), entry.getLongValue());
-            }
-
-            try {
-                pendingOutputs.reset();
-                pendingOutputs.addAll(replacement);
-                blockEntity.setChanged();
-                blockEntity.getMainNode().ifPresent((grid, node) ->
-                        grid.getTickManager().alertDevice(node));
-            } catch (RuntimeException exception) {
-                // No delivery has been accepted yet, so restore the queue before asking OmniSequence to reinject.
-                pendingOutputs.reset();
-                pendingOutputs.addAll(previous);
-                blockEntity.setChanged();
-                return OmniBatchDelivery.RejectReason.INTERNAL_ERROR;
-            }
-            return null;
+            return blockEntity.acceptOmniBatch(staged, request.craftCount())
+                    ? null
+                    : OmniBatchDelivery.RejectReason.CAPACITY_CHANGED;
         } catch (ArithmeticException exception) {
             return OmniBatchDelivery.RejectReason.UNSUPPORTED_INPUT;
         } catch (RuntimeException exception) {

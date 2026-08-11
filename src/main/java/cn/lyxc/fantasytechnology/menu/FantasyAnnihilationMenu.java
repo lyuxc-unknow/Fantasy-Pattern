@@ -3,6 +3,7 @@ package cn.lyxc.fantasytechnology.menu;
 import appeng.api.inventories.InternalInventory;
 import appeng.menu.AEBaseMenu;
 import appeng.menu.SlotSemantics;
+import appeng.menu.guisync.GuiSync;
 import appeng.menu.implementations.MenuTypeBuilder;
 import appeng.menu.slot.AppEngSlot;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
@@ -12,7 +13,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
-
 
 /// Menu of the fantasy annihilation block, in the style of AE2's own machine menus (see {@code SkyChestMenu}).
 ///
@@ -24,15 +24,31 @@ public class FantasyAnnihilationMenu extends AEBaseMenu {
             .create(FantasyAnnihilationMenu::new, FantasyAnnihilationBlockEntity.class)
             .buildUnregistered(ResourceLocation.fromNamespaceAndPath(FantasyTechnology.MODID, "fantasy_annihilation"));
 
+    @GuiSync(0)
+    public boolean waitingForGrid;
+    @GuiSync(1)
+    public long matterBallCharges;
+
+    private final FantasyAnnihilationBlockEntity annihilation;
+
     public FantasyAnnihilationMenu(int id, Inventory playerInventory, FantasyAnnihilationBlockEntity annihilation) {
         super(TYPE, id, playerInventory, annihilation);
+        this.annihilation = annihilation;
 
         var patternInv = annihilation.getPatternInv();
         for (int i = 0; i < patternInv.size(); i++) {
             addSlot(new PatternDisplaySlot(patternInv, i), SlotSemantics.ENCODED_PATTERN);
         }
+        addSlot(new AppEngSlot(annihilation.getMatterBallInv(), 0), SlotSemantics.STORAGE);
 
         createPlayerInventorySlots(playerInventory);
+    }
+
+    @Override
+    public void broadcastChanges() {
+        waitingForGrid = annihilation.isWaitingForGrid();
+        matterBallCharges = annihilation.getMatterBallCharges();
+        super.broadcastChanges();
     }
 
     /// Shows the first output of an encoded fantasy pattern instead of the pattern item itself, like AE2's own
@@ -57,4 +73,5 @@ public class FantasyAnnihilationMenu extends AEBaseMenu {
             return stack;
         }
     }
+
 }

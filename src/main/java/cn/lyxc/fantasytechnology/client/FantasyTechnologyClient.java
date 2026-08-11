@@ -33,7 +33,7 @@ public class FantasyTechnologyClient {
         modEventBus.addListener(this::registerRenderers);
         NeoForge.EVENT_BUS.addListener(this::captureBlockedJeiCategories);
         modContainer.registerExtensionPoint(IConfigScreenFactory.class,
-                (IConfigScreenFactory) (container, parent) -> new FantasyConfigScreen(parent));
+                (container, parent) -> new FantasyConfigScreen(parent));
     }
 
     private void registerScreens(RegisterMenuScreensEvent event) {

@@ -1,7 +1,7 @@
 {
-  "parent": "minecraft:block/cube_all",
+  "parent": "ae2:block/molecular_assembler",
   "textures": {
-    "all": "fantasy_technology:block/fantasy_device_access",
+    "base": "fantasy_technology:block/fantasy_device_access",
     "particle": "fantasy_technology:block/fantasy_device_access"
   }
 }

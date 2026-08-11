@@ -10,7 +10,7 @@ import java.util.Set;
 
 /// The device-access rules currently in force, and the lookup the encoding terminal gates on.
 ///
-/// Written by {@link DeviceRequirementLoader} on the server and by {@link DeviceRequirementSync} on the client;
+/// Written by {@link DeviceRequirementLoader} on the server and by {@link DeviceRequirements} on the client;
 /// both sides hold the same list. On an integrated server the two are literally the same field, which is harmless
 /// because they would only ever be set to equal content.
 public final class DeviceRequirements {

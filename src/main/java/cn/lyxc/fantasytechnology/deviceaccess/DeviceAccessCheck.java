@@ -54,6 +54,19 @@ public final class DeviceAccessCheck {
         return FTConfig.DEVICE_ACCESS_MODE.get() == DeviceAccessMode.UNRESTRICTED;
     }
 
+    /// Whether the server configuration excludes this JEI category from pattern transfer entirely.
+    public static boolean isBlockedCategory(@Nullable ResourceLocation categoryId) {
+        if (categoryId == null) {
+            return false;
+        }
+        for (String configuredId : FTConfig.BLOCKED_JEI_CATEGORY_IDS.get()) {
+            if (categoryId.equals(ResourceLocation.tryParse(configuredId))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// @param recipeId  the recipe's own id, when it has one
     /// @param categoryId the recipe viewer category it came from, when known
     /// @param outputs   the item ids this recipe produces, used to match item-scoped category rules

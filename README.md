@@ -1,6 +1,6 @@
 # AE: 幻梦编码
 
-**Fantasy Technology** (AE: 幻梦编码) adds a compact, ME-native crafting pipeline to Applied Energistics 2 for NeoForge 1.21.1: a *Blank Fantasy Pattern* (空白幻梦样板) that the *Fantasy Encoding Terminal* (幻梦编码终端) turns into a *Fantasy Recombination Pattern* (幻梦重组样板) storing a processing recipe as data, and a *Fantasy Molecular Reconfiguration Pattern Provider* (幻梦分子重构演算样板供应器) block that executes them instantly — consuming the ingredients from your ME network and injecting the results back, with no intermediate machine in between.
+**Fantasy Technology** (AE: 幻梦编码) adds a compact, ME-native crafting pipeline to Applied Energistics 2 for NeoForge 1.21.1: a *Blank Fantasy Pattern* (空白幻梦样板) that the *Fantasy Encoding Terminal* (幻梦编码终端) turns into a *Fantasy Recombination Pattern* (幻梦重组样板) storing a processing recipe as data, and a *Fantasy Molecular Reconfiguration Pattern Provider* (幻梦分子重构演算样板供应器) block that executes them instantly with no intermediate machine.
 
 ---
 
@@ -20,7 +20,9 @@
 
 ### ⚡ Fantasy Molecular Reconfiguration Pattern Provider
 - An ME crafting device that holds Fantasy Patterns and registers them with the network's crafting service.
-- When a crafting CPU executes a pattern, the block consumes the ingredients and inserts the results into the network **instantly** — no progress bar, never busy, so a single block can process as many crafts per tick as the CPU requests.
+- Crafting is **instant** again: there is no processing timer or Acceleration Card requirement.
+- Every accepted craft consumes one fuel charge. Fuel and its per-item craft count are configured together as `item_id:crafts` (for example, `ae2:matter_ball:100000`); by default, one AE2 Matter Ball supplies **100,000 crafts**, and a batch of N repetitions consumes N charges.
+- Matter-ball fuel and the short output-delivery queue survive world or chunk reloads.
 
 ---
 
@@ -45,7 +47,7 @@ Without Mekanism/Applied Mekanistics the mod runs fine; chemical slots simply ar
 2. Open a recipe in JEI and press the transfer button (the `+`) — inputs and results are filled in, tags and amounts preserved.
 3. Optionally press the **double button** next to the results to scale the recipe up.
 4. Press **Encode** — the blank fantasy pattern becomes an encoded Fantasy Recombination Pattern.
-5. Place encoded patterns in a **Fantasy Molecular Reconfiguration Pattern Provider** block connected to your ME network. Request the pattern's output from any terminal: the block consumes the ingredients and produces the result instantly.
+5. Place encoded patterns and AE2 Matter Balls in a **Fantasy Molecular Reconfiguration Pattern Provider** connected to your ME network. Request the pattern's output from any terminal; by default, each Matter Ball powers 100,000 instant crafts.
 
 **Tip:** hovering an encoded pattern in your inventory shows its full recipe (ingredients and results) in the tooltip.
 
@@ -54,9 +56,9 @@ Without Mekanism/Applied Mekanistics the mod runs fine; chemical slots simply ar
 ## Compatibility notes
 
 - **Fast crafting plans** (adapted from [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite), MIT): with a **Fantasy Molecular Reconfiguration Pattern Provider** on the network, crafting calculations run through an aggregated recipe-tree planner — deep recursive trees (e.g. Mystical Agriculture's layered essence chains) are deduplicated into a graph and evaluated in one linear pass, and recipes that borrow a tool or container instead of consuming it take a specialized path (one tool borrowed, worn remains recycled). Anything the planner cannot prove equivalent is handed straight back to AE2, either as a single subtree or by abandoning the aggregate before any work has been delegated.
-- **Batch dispatch**: the same provider accepts several repetitions of one recipe in a single push, so a crafting CPU does one inventory walk instead of N. Throughput is deliberately unchanged — each craft still costs the CPU one operation, so co-processor scaling behaves exactly as it does in stock AE2.
-- Both are server config options in `fantasy_technology-server.toml` (`max_fast_mode`, `batch_dispatch_enabled`); `diagnostics` logs why the planner aggregated or fell back. In a local world these settings can also be edited from Fantasy Technology's Config button in NeoForge's mod list. The screen is read-only on remote servers and outside a world. License notice: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- **Coexistence with OmniSequence-Transfinite**: when OmniSequence is installed, `FantasyTechnologyMixinPlugin` skips this mod's batch dispatch and its pattern-input cache, both of which OmniSequence already provides — chaining two extraction wrappers would otherwise scale one recipe twice. The aggregated planner stays active either way: it triggers on this mod's block, OmniSequence's triggers on theirs, and the two wrappers nest correctly.
+- **Execution modes**: normal AE2 dispatch and OmniSequence's optional batch SPI both use the same instant path and fuel accounting. A batch of N repetitions consumes N of the 100,000 craft charges supplied by each Matter Ball by default. Fuel values use `item_id:crafts` entries in `annihilation_fuel_items`. `batch_dispatch_enabled` disables the optional OmniSequence batch entry point and takes effect after re-entering the world or restarting the game.
+- The aggregated planner is configured through `max_fast_mode`; `diagnostics` logs why it aggregated or fell back. In a local world these settings can also be edited from Fantasy Technology's Config button in NeoForge's mod list. The screen is read-only on remote servers and outside a world. License notice: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **Coexistence with OmniSequence-Transfinite**: the aggregated planners continue to coexist; with OmniSequence present its batch SPI drives concurrent delivery, while without it this mod automatically uses the normal serialized CPU logic.
 - **Modern Industrialization & other machine mods**: recipe transfer uses the amounts JEI displays, so multi-count machine recipes (e.g. `2x iron plate`) fill in correctly.
 - **AllTheLeaks**: if a mod's `getIngredients()` has side effects that AllTheLeaks locks against, the server falls back to the displayed recipe instead of failing — the first occurrence logs a warning, and that recipe type is remembered for the session.
 - **JEI tag-information pages** (`minecraft:tag_recipes/*`) and the **P2P tunnel attunement page** (from the AE2-JEI-Integration addon) are blocked by default because they are browse-only pages, not recipes. The category-id list is configurable through `blocked_jei_category_ids` in the server config; changes require leaving and re-entering the world or restarting the game.

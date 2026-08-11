@@ -93,7 +93,8 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
     /// Change counter and contents of the last catalyst summary sent to the client; see {@link #syncDeviceCatalysts}.
     private long lastCatalystVersion = Long.MIN_VALUE;
-    private Map<Item, Integer> lastSentCatalysts = Map.of();
+    @Nullable
+    private Map<Item, Integer> lastSentCatalysts;
 
     /// Ticks between the sweeps that catch changes no inventory edit announces - a device block broken, the network
     /// rewired. One second is far below what a player can react to and costs one walk of the device blocks.
@@ -185,7 +186,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         lastCatalystVersion = version;
 
         var catalysts = FantasyDeviceAccessBlockEntity.collectCatalysts(networkGrid());
-        if (catalysts.equals(lastSentCatalysts)) {
+        if (lastSentCatalysts != null && catalysts.equals(lastSentCatalysts)) {
             return;
         }
         lastSentCatalysts = Map.copyOf(catalysts);

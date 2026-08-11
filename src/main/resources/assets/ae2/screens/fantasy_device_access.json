@@ -4,7 +4,7 @@
     "common/palette.json"
   ],
   "background": {
-    "texture": "guis/fantasy_annihilation.png",
+    "texture": "guis/fantasy_device_access.png",
     "srcRect": [0, 0, 176, 180]
   },
   "slots": {

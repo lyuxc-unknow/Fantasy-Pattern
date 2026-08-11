@@ -22,7 +22,7 @@ import java.util.Map;
 /// A plain reload listener rather than a datapack registry, deliberately: datapack registries in this version are
 /// built once when the world loads and {@code /reload} does not rebuild them, so a pack author editing a rule would
 /// have to leave and re-enter the world to see it. This runs as part of {@code /reload} like recipes do, and
-/// {@link DeviceRequirementSync} pushes the result to everyone afterwards.
+/// {@link DeviceRequirementLoader} pushes the result to everyone afterwards.
 public class DeviceRequirementLoader extends SimpleJsonResourceReloadListener {
 
     public static final String DIRECTORY = "device_access";

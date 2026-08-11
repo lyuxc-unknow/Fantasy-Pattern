@@ -66,13 +66,18 @@ public class FantasyAnnihilationBlock extends Block implements EntityBlock {
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (!state.is(newState.getBlock())
                 && level.getBlockEntity(pos) instanceof FantasyAnnihilationBlockEntity annihilation) {
-            for (int i = 0; i < annihilation.getInternalInventory().size(); i++) {
-                var stack = annihilation.getInternalInventory().getStackInSlot(i);
-                if (!stack.isEmpty()) {
-                    Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
-                }
-            }
+            dropInventory(level, pos, annihilation.getInternalInventory());
+            dropInventory(level, pos, annihilation.getMatterBallInv());
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
+    }
+
+    private static void dropInventory(Level level, BlockPos pos, appeng.api.inventories.InternalInventory inventory) {
+        for (int i = 0; i < inventory.size(); i++) {
+            var stack = inventory.getStackInSlot(i);
+            if (!stack.isEmpty()) {
+                Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
+            }
+        }
     }
 }

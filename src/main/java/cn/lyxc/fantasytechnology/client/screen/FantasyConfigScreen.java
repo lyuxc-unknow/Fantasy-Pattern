@@ -4,12 +4,7 @@ import cn.lyxc.fantasytechnology.config.DeviceAccessMode;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.crafting.maxfast.OmniMaxFastMode;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.StringWidget;
-import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.OptionsSubScreen;
@@ -18,7 +13,6 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
 /// Native configuration screen exposed through NeoForge's mod list.
 ///
@@ -42,6 +36,8 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
     private Button diagnosticsButton;
     private Button deviceAccessButton;
     private Button blockedCategoriesButton;
+    private Button fuelItemsButton;
+    private Button consumeFuelButton;
     private Button resetButton;
     private Button doneButton;
     private StringWidget statusWidget;
@@ -95,7 +91,11 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         addRow("fantasy_technology.configuration.device_access_mode", this.deviceAccessButton);
 
         this.blockedCategoriesButton = Button.builder(blockedCategoriesName(), button -> this.minecraft.setScreen(
-                        new BlockedJeiCategoriesScreen(this, draft.blockedCategoryIds,
+                        new ResourceLocationListScreen(this,
+                                Component.translatable("fantasy_technology.config.blocked_categories.title"),
+                                Component.translatable("fantasy_technology.config.category_id"),
+                                "fantasy_technology.config.invalid_category",
+                                draft.blockedCategoryIds,
                                 values -> {
                                     draft.blockedCategoryIds = new ArrayList<>(values);
                                     updateBlockedCategoriesButton();
@@ -105,6 +105,28 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
                 .build();
         this.blockedCategoriesButton.active = this.editable;
         this.list.addSmall(this.blockedCategoriesButton, null);
+
+        this.fuelItemsButton = Button.builder(fuelItemsName(), button -> this.minecraft.setScreen(
+                        new ResourceLocationListScreen(this,
+                                Component.translatable("fantasy_technology.config.fuel_items.title"),
+                                Component.translatable("fantasy_technology.config.fuel_entry"),
+                                "fantasy_technology.config.invalid_fuel_entry",
+                                FTConfig::normalizeAnnihilationFuel,
+                                draft.fuelItems,
+                                values -> {
+                                    draft.fuelItems = new ArrayList<>(values);
+                                    updateFuelItemsButton();
+                                })))
+                .width(310)
+                .build();
+        this.fuelItemsButton.active = this.editable;
+        this.list.addSmall(this.fuelItemsButton, null);
+
+        this.consumeFuelButton = Button.builder(toggleName(draft.consumeFuel), button -> {
+            draft.consumeFuel = !draft.consumeFuel;
+            button.setMessage(toggleName(draft.consumeFuel));
+        }).width(CONTROL_WIDTH).build();
+        addRow("fantasy_technology.configuration.consume_fuel", this.consumeFuelButton);
     }
 
     @Override
@@ -151,7 +173,6 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         if (compileBudget == null) {
             return;
         }
-
         draft.maxNodes = maxNodes;
         draft.compileBudgetMs = compileBudget;
         FTConfig.MAX_FAST_MODE.set(draft.maxFastMode);
@@ -161,6 +182,8 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         FTConfig.DIAGNOSTICS.set(draft.diagnostics);
         FTConfig.DEVICE_ACCESS_MODE.set(draft.deviceAccessMode);
         FTConfig.BLOCKED_JEI_CATEGORY_IDS.set(List.copyOf(draft.blockedCategoryIds));
+        FTConfig.ANNIHILATION_FUEL_ITEMS.set(List.copyOf(draft.fuelItems));
+        FTConfig.CONSUME_FUEL.set(draft.consumeFuel);
         FTConfig.SPEC.save();
         this.minecraft.setScreen(this.lastScreen);
     }
@@ -187,6 +210,8 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         diagnosticsButton.setMessage(toggleName(draft.diagnostics));
         deviceAccessButton.setMessage(deviceAccessName(draft.deviceAccessMode));
         updateBlockedCategoriesButton();
+        updateFuelItemsButton();
+        consumeFuelButton.setMessage(toggleName(draft.consumeFuel));
         setDefaultStatus();
     }
 
@@ -196,9 +221,20 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         }
     }
 
+    private void updateFuelItemsButton() {
+        if (this.fuelItemsButton != null) {
+            this.fuelItemsButton.setMessage(fuelItemsName());
+        }
+    }
+
     private Component blockedCategoriesName() {
         return Component.translatable("fantasy_technology.config.blocked_categories",
                 draft.blockedCategoryIds.size());
+    }
+
+    private Component fuelItemsName() {
+        return Component.translatable("fantasy_technology.config.fuel_items",
+                draft.fuelItems.size());
     }
 
     private void setDefaultStatus() {
@@ -252,6 +288,8 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         private boolean diagnostics;
         private DeviceAccessMode deviceAccessMode;
         private List<String> blockedCategoryIds;
+        private List<String> fuelItems;
+        private boolean consumeFuel;
 
         private static Draft read() {
             var draft = new Draft();
@@ -263,6 +301,8 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
                 draft.diagnostics = FTConfig.DIAGNOSTICS.get();
                 draft.deviceAccessMode = FTConfig.DEVICE_ACCESS_MODE.get();
                 draft.blockedCategoryIds = new ArrayList<>(FTConfig.BLOCKED_JEI_CATEGORY_IDS.get());
+                draft.fuelItems = new ArrayList<>(FTConfig.ANNIHILATION_FUEL_ITEMS.get());
+                draft.consumeFuel = FTConfig.CONSUME_FUEL.get();
             } else {
                 draft.reset();
             }
@@ -277,6 +317,8 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
             this.diagnostics = FTConfig.DIAGNOSTICS.getDefault();
             this.deviceAccessMode = FTConfig.DEVICE_ACCESS_MODE.getDefault();
             this.blockedCategoryIds = new ArrayList<>(FTConfig.DEFAULT_BLOCKED_JEI_CATEGORY_IDS);
+            this.fuelItems = new ArrayList<>(FTConfig.DEFAULT_ANNIHILATION_FUEL_ITEMS);
+            this.consumeFuel = FTConfig.CONSUME_FUEL.getDefault();
         }
     }
 }

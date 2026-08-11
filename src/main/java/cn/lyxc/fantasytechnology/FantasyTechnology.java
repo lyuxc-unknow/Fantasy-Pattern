@@ -4,8 +4,8 @@ import appeng.api.AECapabilities;
 import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.parts.PartModels;
 import appeng.blockentity.AEBaseBlockEntity;
-import cn.lyxc.fantasytechnology.crafting.FantasyPatternDecoder;
 import cn.lyxc.fantasytechnology.config.FTConfig;
+import cn.lyxc.fantasytechnology.crafting.FantasyPatternDecoder;
 import cn.lyxc.fantasytechnology.deviceaccess.DeviceRequirementLoader;
 import cn.lyxc.fantasytechnology.deviceaccess.DeviceRequirements;
 import cn.lyxc.fantasytechnology.network.DeviceRequirementSync;
@@ -16,13 +16,14 @@ import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.fml.config.ModConfig;
 import org.slf4j.Logger;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
@@ -79,6 +80,10 @@ public class FantasyTechnology {
         event.registerBlockEntity(AECapabilities.IN_WORLD_GRID_NODE_HOST,
                 FTBlockEntities.FANTASY_DEVICE_ACCESS.get(),
                 (blockEntity, context) -> blockEntity);
+        event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, FTBlockEntities.FANTASY_ANNIHILATION.get(),
+                (blockEntity, direction) -> blockEntity.getMatterBallInv().toItemHandler());
+        event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, FTBlockEntities.FANTASY_DEVICE_ACCESS.get(),
+                (blockEntity, direction) -> blockEntity.getExposedItemHandler(direction));
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
