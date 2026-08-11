@@ -76,7 +76,7 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
                     TransferRecipePayload::inputs,
                     GenericStack.STREAM_CODEC.apply(ByteBufCodecs.list(FantasyPatternData.MAX_OUTPUTS)),
                     TransferRecipePayload::outputs,
-                    ByteBufCodecs.<Item>registry(Registries.ITEM)
+                    ByteBufCodecs.registry(Registries.ITEM)
                             .apply(ByteBufCodecs.list(MAX_CATALYSTS)),
                     TransferRecipePayload::catalysts,
                     TransferRecipePayload::new);

@@ -12,6 +12,7 @@ import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.neoforged.neoforge.common.conditions.ConditionalOps;
 import net.neoforged.neoforge.common.conditions.ICondition;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,8 +40,8 @@ public class DeviceRequirementLoader extends SimpleJsonResourceReloadListener {
     }
 
     @Override
-    protected void apply(Map<ResourceLocation, JsonElement> files, ResourceManager resourceManager,
-            ProfilerFiller profiler) {
+    protected void apply(Map<ResourceLocation, JsonElement> files, @NotNull ResourceManager resourceManager,
+                         @NotNull ProfilerFiller profiler) {
         var registryOps = RegistryOps.create(JsonOps.INSTANCE, registryAccess);
         var ops = new ConditionalOps<>(registryOps, conditionContext);
         var codec = ConditionalOps.createConditionalCodec(DeviceRequirement.CODEC);

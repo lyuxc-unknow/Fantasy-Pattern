@@ -4,6 +4,7 @@ import appeng.api.AECapabilities;
 import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.parts.PartModels;
 import appeng.blockentity.AEBaseBlockEntity;
+import appeng.blockentity.AEBaseInvBlockEntity;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.crafting.FantasyPatternDecoder;
 import cn.lyxc.fantasytechnology.deviceaccess.DeviceRequirementLoader;
@@ -83,7 +84,7 @@ public class FantasyTechnology {
         event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, FTBlockEntities.FANTASY_ANNIHILATION.get(),
                 (blockEntity, direction) -> blockEntity.getMatterBallInv().toItemHandler());
         event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, FTBlockEntities.FANTASY_DEVICE_ACCESS.get(),
-                (blockEntity, direction) -> blockEntity.getExposedItemHandler(direction));
+                AEBaseInvBlockEntity::getExposedItemHandler);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {

@@ -3,7 +3,6 @@ package cn.lyxc.fantasytechnology.client.screen;
 import appeng.client.gui.AEBaseScreen;
 import appeng.client.gui.style.PaletteColor;
 import appeng.client.gui.style.ScreenStyle;
-import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
 import net.minecraft.client.gui.GuiGraphics;
