@@ -31,7 +31,7 @@ public class FantasyDeviceAccessBlockEntity extends AENetworkedInvBlockEntity {
 
     /// Per-slot ceiling. The terminal requires four catalysts in total, so a single slot can carry a recipe on its
     /// own - and anything beyond that has to be spread across slots, which is the point.
-    public static final int SLOT_LIMIT = 4;
+    public static final int SLOT_LIMIT = 64;
 
     /// Idle power draw while connected to a grid (AE/t).
     private static final double IDLE_POWER_USAGE = 1.0;
