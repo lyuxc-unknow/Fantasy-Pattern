@@ -6,7 +6,7 @@ import appeng.api.stacks.KeyCounter;
 import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
-import cn.lyxc.fantasytechnology.crafting.MolecularReusableInputAdapters;
+import com.ae2vm.addon.crafting.DurableInputAdapters;
 import cn.lyxc.fantasytechnology.integration.omnisequence.FantasyOmniBatchAdmission;
 import com.atir.molecularmanipulator.api.crafting.OmniBatchAdmission;
 import com.atir.molecularmanipulator.api.crafting.OmniBatchCraftingProvider;
@@ -135,8 +135,8 @@ public abstract class OmniBatchCraftingProviderMixin implements OmniBatchCraftin
             OmniBatchRequest request, Level level, KeyCounter staged) {
         var patternInputs = pattern.getInputs();
         long[] amounts = new long[patternInputs.length];
-        MolecularReusableInputAdapters.Mode[] modes =
-                new MolecularReusableInputAdapters.Mode[patternInputs.length];
+        DurableInputAdapters.Mode[] modes =
+                new DurableInputAdapters.Mode[patternInputs.length];
         int[] entries = new int[patternInputs.length];
 
         for (var delivered : request.inputs()) {
@@ -149,7 +149,7 @@ public abstract class OmniBatchCraftingProviderMixin implements OmniBatchCraftin
             if (!input.isValid(delivered.key(), level)) {
                 return false;
             }
-            var analysis = MolecularReusableInputAdapters.analyze(input, delivered.key(), level,
+            var analysis = DurableInputAdapters.analyze(input, delivered.key(), level,
                     request.craftCount());
             if (!analysis.isSupported()) {
                 return false;
@@ -169,7 +169,7 @@ public abstract class OmniBatchCraftingProviderMixin implements OmniBatchCraftin
                 if (entries[slot] != 1 || analysis.safeCrafts() < request.craftCount()) {
                     return false;
                 }
-                AEKey remaining = MolecularReusableInputAdapters.wearDownBy(input, delivered.key(),
+                AEKey remaining = DurableInputAdapters.wearDownBy(input, delivered.key(),
                         request.craftCount());
                 if (remaining != null) {
                     fantasyTechnology$addChecked(staged, remaining, delivered.amount());
@@ -181,7 +181,7 @@ public abstract class OmniBatchCraftingProviderMixin implements OmniBatchCraftin
             if (entries[slot] == 0 || modes[slot] == null) {
                 return false;
             }
-            long expected = modes[slot] == MolecularReusableInputAdapters.Mode.CONSUMABLE
+            long expected = modes[slot] == DurableInputAdapters.Mode.CONSUMABLE
                     ? Math.multiplyExact(patternInputs[slot].getMultiplier(), request.craftCount())
                     : patternInputs[slot].getMultiplier();
             if (amounts[slot] != expected) {

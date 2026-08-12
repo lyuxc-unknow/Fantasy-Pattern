@@ -13,7 +13,7 @@ import java.util.Set;
 /// This mod's crafting acceleration is adapted from OmniSequence, so with both installed some mixins would overlap
 /// in ways that are not merely redundant:
 ///
-/// - `AECraftingPatternInputMixin` and `KeyCounterMixin` duplicate OmniSequence's cache and overflow handling.
+/// - `KeyCounterMixin` duplicates OmniSequence's overflow handling.
 /// - The MAX_FAST calculation and crafting-tree accessors are the local fallback copy of OmniSequence's planner.
 /// - The crafting-job accessors only support this mod's fallback CPU dispatcher.
 ///
@@ -33,7 +33,6 @@ public class FantasyTechnologyMixinPlugin implements IMixinConfigPlugin {
             "com.atir.molecularmanipulator.api.crafting.OmniBatchCraftingProvider";
 
     private static final Set<String> OMNISEQUENCE_OWNED_MIXINS = Set.of(
-            "cn.lyxc.fantasytechnology.mixin.AECraftingPatternInputMixin",
             "cn.lyxc.fantasytechnology.mixin.CraftingCpuLogicMixin",
             "cn.lyxc.fantasytechnology.mixin.CraftingTaskProgressAccessor",
             "cn.lyxc.fantasytechnology.mixin.ExecutingCraftingJobAccessor",

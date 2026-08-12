@@ -3,10 +3,8 @@
 ## OmniSequence-Transfinite
 
 The aggregated crafting-plan optimizer (`OmniMaxFastPlanner` and the AE2 tree
-accessors it reads through), the reusable-input adapters
-(`MolecularReusableInputAdapters`), the batch-dispatch integration (crafting CPU
-extraction and push acceleration) and the `getRemainingKey`/`isValid` caches in
-this project are adapted from
+accessors it reads through) and the batch-dispatch integration (crafting CPU
+extraction and push acceleration) in this project are adapted from
 [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite),
 licensed under the **MIT License**.
 
@@ -52,11 +50,11 @@ license; it is a modified fork of
 **GNU Lesser General Public License v3.0** (LGPL-3.0). The full license text
 is provided in [`LICENSES/LGPL-3.0.txt`](LICENSES/LGPL-3.0.txt).
 
-The local fork is based on upstream v1.8.1 and adds, relative to upstream:
+The local fork is based on upstream AE2-VM and adds, relative to upstream:
 
-- Durable-input awareness: a new `EXTRACT_DURABLE` opcode and
-  `DurableInputAdapters` that plan reusable tools/catalysts by remaining
-  durability instead of one tool per craft.
+- Durable-input ownership: `DurableInputAdapters`, its deterministic-wear
+  contract, AE2 input caches and CPU worn-variant extraction live entirely in
+  AE2-VM instead of being split across this mod.
 - Worn-variant accounting: the plan lists the actual durability variants
   present in the network inventory and only reports uncovered demand as
   missing.

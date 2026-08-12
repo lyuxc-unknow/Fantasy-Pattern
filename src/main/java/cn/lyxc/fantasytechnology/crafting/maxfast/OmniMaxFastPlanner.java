@@ -39,10 +39,9 @@ import appeng.crafting.inv.CraftingSimulationState;
 import appeng.crafting.pattern.AECraftingPattern;
 import appeng.crafting.pattern.AEProcessingPattern;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
-import cn.lyxc.fantasytechnology.crafting.DeterministicWearInput;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
 import cn.lyxc.fantasytechnology.config.FTConfig;
-import cn.lyxc.fantasytechnology.crafting.MolecularReusableInputAdapters;
+import com.ae2vm.addon.crafting.DurableInputAdapters;
 import cn.lyxc.fantasytechnology.integration.ae2.OmniCraftingTreeNodeBridge;
 import cn.lyxc.fantasytechnology.integration.ae2.OmniCraftingTreeProcessBridge;
 
@@ -505,7 +504,6 @@ public final class OmniMaxFastPlanner {
         long totalRequestedItems = saturatedMultiply(node.amount, remainingAmount);
         long patternTimes = ceilDiv(totalRequestedItems, outputPerPattern);
         var inputPlans = new ArrayList<BoundaryInputPlan>(inputs.length);
-        int deterministicDamageInputs = 0;
         int inputIndex = 0;
         for (var entry : childNodes.entrySet()) {
             checkpoint(pauseCheckpoint);
@@ -531,20 +529,14 @@ public final class OmniMaxFastPlanner {
                 return rejectReusableBoundary(node, details, "invalid_input_multiplier", null);
             }
             if (mode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
-                deterministicDamageInputs++;
-                if (multiplier != 1) {
-                    return rejectReusableBoundary(node, details,
-                            "unsupported_damage_input_multiplier", null);
-                }
-                if (deterministicDamageInputs > 1) {
-                    return rejectReusableBoundary(node, details,
-                            "multiple_damage_inputs", null);
-                }
+                return rejectReusableBoundary(node, details,
+                        "durability_owned_by_ae2vm", null);
             }
             long childRequest = switch (mode) {
                 case INVARIANT_REUSABLE -> multiplier;
                 case CONSUMABLE -> saturatedMultiply(multiplier, patternTimes);
-                case DETERMINISTIC_DAMAGE -> 0;
+                case DETERMINISTIC_DAMAGE -> throw new IllegalStateException(
+                        "Durability input escaped AE2-VM fallback");
                 case UNSAFE -> throw new IllegalStateException(
                         "Unsafe reusable boundary input escaped classification");
             };
@@ -553,24 +545,9 @@ public final class OmniMaxFastPlanner {
         }
 
         var containerItems = new KeyCounter();
-        // Resolve the speculative durability optimization before issuing any
-        // ordinary child request. A rejected durability boundary must not leak
-        // missing-item accounting into AE2 before the native planner fallback.
         for (BoundaryInputPlan inputPlan : inputPlans) {
-            if (inputPlan.mode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
-                if (!allocateDeterministicDamageInput(attempt, inputPlan.input,
-                        inputPlan.child, inputPlan.multiplier, patternTimes,
-                        pauseCheckpoint)) {
-                    return rejectReusableBoundary(node, details,
-                            "insufficient_deterministic_damage_capacity", null);
-                }
-            }
-        }
-        for (BoundaryInputPlan inputPlan : inputPlans) {
-            if (inputPlan.mode != BoundaryInputMode.DETERMINISTIC_DAMAGE) {
-                inputPlan.child.fantasytechnology$request(
-                        attempt, inputPlan.requestedAmount, containerItems);
-            }
+            inputPlan.child.fantasytechnology$request(
+                    attempt, inputPlan.requestedAmount, containerItems);
         }
 
         for (var stack : containerItems) {
@@ -649,146 +626,13 @@ public final class OmniMaxFastPlanner {
 
     private static BoundaryInputMode classifyRemainingKey(IPatternDetails.IInput input,
             AEKey key, net.minecraft.world.level.Level level) {
-        var analysis = MolecularReusableInputAdapters.analyze(input, key, level, 2);
+        var analysis = DurableInputAdapters.analyze(input, key, level, 2);
         return switch (analysis.mode()) {
             case CONSUMABLE -> BoundaryInputMode.CONSUMABLE;
             case INVARIANT_REUSABLE -> BoundaryInputMode.INVARIANT_REUSABLE;
             case DETERMINISTIC_DAMAGE -> BoundaryInputMode.DETERMINISTIC_DAMAGE;
             case UNSUPPORTED -> BoundaryInputMode.UNSAFE;
         };
-    }
-
-    /**
-     * Reserves real finite-durability tools for a pattern boundary.
-     *
-     * <p>Each selected group contains {@code inputMultiplier} tools with the
-     * exact same AE key, so a single pattern extraction never has to mix damage
-     * states. Existing tools contribute their proven remaining capacity first.
-     * If that is insufficient, the fresh primary tool is requested in one
-     * recursive batch for the remaining capacity instead of returning to AE2's
-     * one-pattern-at-a-time container loop.</p>
-     *
-     * <p>We intentionally do not credit the final damaged tools back into the
-     * planning inventory: execution may choose another valid damage state, and
-     * omitting those remainders is conservative while the real CPU still
-     * returns every exact remainder produced by the recipe. Input and remainder
-     * byte costs are nevertheless recorded for every logical use.</p>
-     */
-    private static boolean allocateDeterministicDamageInput(
-            CraftingSimulationState inventory, IPatternDetails.IInput input,
-            OmniCraftingTreeNodeBridge child, long inputMultiplier,
-            long patternTimes, PauseCheckpoint pauseCheckpoint)
-            throws CraftBranchFailure, InterruptedException {
-        if (inputMultiplier != 1 || patternTimes <= 0
-                || child.fantasytechnology$getAmount() != 1) {
-            return false;
-        }
-
-        var selections = new ArrayList<FiniteToolSelection>();
-        var seenKeys = new HashSet<AEKey>();
-        long remainingPatterns = patternTimes;
-
-        for (InputTemplate template : child.fantasytechnology$getValidItemTemplates(inventory)) {
-            checkpoint(pauseCheckpoint);
-            if (remainingPatterns == 0) {
-                break;
-            }
-            if (template == null || template.key() == null || template.amount() != 1) {
-                return false;
-            }
-            if (!seenKeys.add(template.key())) {
-                continue;
-            }
-
-            long available = inventory.extract(
-                    template.key(), Long.MAX_VALUE, Actionable.SIMULATE);
-            long availableGroups = available / inputMultiplier;
-            if (availableGroups <= 0) {
-                continue;
-            }
-
-            long toolCapacity = deterministicDamageCapacity(
-                    input, template.key(), child.fantasytechnology$getLevel(), remainingPatterns);
-            if (toolCapacity <= 0) {
-                return false;
-            }
-
-            long groupsNeeded = ceilDiv(remainingPatterns, toolCapacity);
-            long selectedGroups = Math.min(availableGroups, groupsNeeded);
-            long toolAmount;
-            try {
-                toolAmount = Math.multiplyExact(
-                        selectedGroups, inputMultiplier);
-            } catch (ArithmeticException exception) {
-                return false;
-            }
-
-            selections.add(new FiniteToolSelection(
-                    template.key(), toolAmount));
-            long coveredPatterns = saturatedMultiply(
-                    selectedGroups, toolCapacity);
-            long usedPatterns = Math.min(remainingPatterns, coveredPatterns);
-            remainingPatterns -= usedPatterns;
-        }
-
-        long newToolAmount = 0;
-        if (remainingPatterns > 0) {
-            AEKey freshTool = child.fantasytechnology$getWhat();
-            long freshToolCapacity = deterministicDamageCapacity(
-                    input, freshTool, child.fantasytechnology$getLevel(), remainingPatterns);
-            if (freshToolCapacity <= 0) {
-                return false;
-            }
-
-            long newToolGroups = ceilDiv(remainingPatterns, freshToolCapacity);
-            try {
-                newToolAmount = Math.multiplyExact(
-                        newToolGroups, inputMultiplier);
-            } catch (ArithmeticException exception) {
-                return false;
-            }
-        }
-
-        long logicalUses;
-        try {
-            logicalUses = Math.multiplyExact(inputMultiplier, patternTimes);
-        } catch (ArithmeticException exception) {
-            return false;
-        }
-        if (newToolAmount > logicalUses) {
-            return false;
-        }
-
-        for (FiniteToolSelection selection : selections) {
-            long extracted = inventory.extract(
-                    selection.key, selection.amount, Actionable.MODULATE);
-            if (extracted != selection.amount) {
-                throw new IllegalStateException(
-                        "Crafting simulation inventory changed during finite-tool extraction");
-            }
-        }
-
-        if (newToolAmount > 0) {
-            child.fantasytechnology$request(inventory, newToolAmount, null);
-        }
-
-        // Requesting newly crafted tools already charged their first logical
-        // input use. Existing tools and all later reuses still need that cost.
-        long additionalInputUses = logicalUses - newToolAmount;
-        if (additionalInputUses > 0) {
-            inventory.addStackBytes(
-                    child.fantasytechnology$getWhat(), 1,
-                    additionalInputUses);
-        }
-
-        // Runtime is allowed to choose another valid damage-state ordering.
-        // Charge the maximum possible remainder volume so CPU storage is never
-        // underestimated even when fewer tools actually break than planned.
-        if (logicalUses > 0) {
-            inventory.addStackBytes(
-                    child.fantasytechnology$getWhat(), 1, logicalUses);
-        }
-        return true;
     }
 
     private static boolean leaseInvariantReusableInput(
@@ -819,11 +663,11 @@ public final class OmniMaxFastPlanner {
             if (selectedAmount == 0) {
                 continue;
             }
-            var analysis = MolecularReusableInputAdapters.analyze(
+            var analysis = DurableInputAdapters.analyze(
                     reusableInput.input, template.key(),
                     reusableInput.child.fantasytechnology$getLevel(), 2);
             if (analysis.mode()
-                    != MolecularReusableInputAdapters.Mode.INVARIANT_REUSABLE
+                    != DurableInputAdapters.Mode.INVARIANT_REUSABLE
                     || !template.key().equals(analysis.finalKey())) {
                 return false;
             }
@@ -855,32 +699,6 @@ public final class OmniMaxFastPlanner {
                 reusableInput.child.fantasytechnology$getWhat(), 1,
                 logicalUses);
         return true;
-    }
-
-    /**
-     * Returns a proven capacity for one deterministic damage input. The adapter intentionally caps each walk at
-     * MAX_DETERMINISTIC_TRANSITIONS; that capped value is only a lower bound when the chain is still alive. Fantasy
-     * inputs carry a pure wear-function marker, so their exact remaining durability is a safe capacity bound. Other
-     * recipe implementations are conservatively handed back to AE2 once the proof window is exhausted.
-     */
-    private static long deterministicDamageCapacity(IPatternDetails.IInput input, AEKey key,
-            net.minecraft.world.level.Level level, long requestedCrafts) {
-        if (requestedCrafts <= 0) {
-            return 0;
-        }
-        var analysis = MolecularReusableInputAdapters.analyze(input, key, level, requestedCrafts);
-        if (analysis.mode() != MolecularReusableInputAdapters.Mode.DETERMINISTIC_DAMAGE
-                || analysis.safeCrafts() <= 0) {
-            return 0;
-        }
-        if (analysis.safeCrafts() >= requestedCrafts || analysis.finalKey() == null) {
-            return analysis.safeCrafts();
-        }
-        if (!(input instanceof DeterministicWearInput)) {
-            return 0;
-        }
-        long durability = MolecularReusableInputAdapters.remainingDurabilityCrafts(key);
-        return durability < analysis.safeCrafts() ? 0 : Math.min(requestedCrafts, durability);
     }
 
     private static long extractTemplateMultipliers(CraftingSimulationState inventory,
@@ -939,9 +757,6 @@ public final class OmniMaxFastPlanner {
         private boolean reusable() {
             return reusableInput != null;
         }
-    }
-
-    private record FiniteToolSelection(AEKey key, long amount) {
     }
 
     private static void validateTemplates(Node node, CraftingSimulationState inventory,

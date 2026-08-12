@@ -34,6 +34,7 @@ import appeng.crafting.execution.CraftingCpuHelper;
 import appeng.crafting.inv.ICraftingInventory;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.config.FTConfig;
+import com.ae2vm.addon.crafting.DurableInputAdapters;
 import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
@@ -215,7 +216,7 @@ public final class FantasyBatchExtraction {
                     // expects the worn one back. Analyse with the actual batch size, not an unbounded request:
                     // a wearing tool has a finite chain, and walking it to the end would report "worn out" even
                     // though the requested batch fits inside the remaining durability.
-                    var analysis = MolecularReusableInputAdapters.analyze(
+                    var analysis = DurableInputAdapters.analyze(
                             patternInputs[index], key, level, requestedMaxCrafts);
                     if (!analysis.isReusable() || analysis.safeCrafts() < 2) {
                         // Random damage (Unbreaking), an unknown transition, or a tool with a single use left can
@@ -375,7 +376,7 @@ public final class FantasyBatchExtraction {
                     if (slot == null) {
                         continue;
                     }
-                    AEKey worn = MolecularReusableInputAdapters.wearDownBy(
+                    AEKey worn = DurableInputAdapters.wearDownBy(
                             slot.input(), slot.key(), craftCount);
                     // An item that comes back unchanged after the whole batch needs no correction at all: what AE2
                     // recorded for one craft is already right for all of them.
@@ -415,7 +416,7 @@ public final class FantasyBatchExtraction {
         }
 
         private static void logReusableFallback(AEKey key,
-                MolecularReusableInputAdapters.Analysis analysis) {
+                DurableInputAdapters.Analysis analysis) {
             if (FTConfig.DIAGNOSTICS.get()) {
                 FantasyTechnology.LOGGER.info(
                         "Fantasy batch: reusable input {} is not batchable (mode={}, safeCrafts={}); "

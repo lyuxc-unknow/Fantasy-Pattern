@@ -7,8 +7,8 @@ import appeng.api.stacks.GenericStack;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.registry.FTComponents;
-import net.minecraft.world.item.DiggerItem;
-import net.minecraft.world.item.ItemStack;
+import com.ae2vm.addon.crafting.DeterministicWearInput;
+import com.ae2vm.addon.crafting.DurableInputAdapters;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
@@ -52,12 +52,7 @@ public class FantasyCraftingPattern implements IPatternDetails {
     /// Whether a craft wears this ingredient down instead of consuming it: damageable items, items with a
     /// crafting-remaining form (buckets, reusable infusion crystals), and diggers that carry no durability at all.
     public static boolean isReusable(AEKey key) {
-        if (!(key instanceof AEItemKey itemKey)) {
-            return false;
-        }
-        ItemStack stack = itemKey.toStack();
-        return stack.isDamageableItem() || !stack.getCraftingRemainingItem().isEmpty()
-                || itemKey.getItem() instanceof DiggerItem;
+        return DurableInputAdapters.isReusableIngredient(key);
     }
 
     /// What one use of a reusable ingredient leaves behind:
@@ -73,23 +68,7 @@ public class FantasyCraftingPattern implements IPatternDetails {
     /// one straight back, and an ingredient that is never consumed is an ingredient duplicated for free.
     @Nullable
     static AEKey wearDown(AEKey template) {
-        if (!(template instanceof AEItemKey itemKey)) {
-            return null;
-        }
-        ItemStack stack = itemKey.toStack();
-        ItemStack remaining = stack.getCraftingRemainingItem();
-        if (!remaining.isEmpty()) {
-            return AEItemKey.of(remaining);
-        }
-        if (stack.isDamageableItem()) {
-            int damage = stack.getDamageValue() + 1;
-            if (damage >= stack.getMaxDamage()) {
-                return null;
-            }
-            stack.setDamageValue(damage);
-            return AEItemKey.of(stack);
-        }
-        return itemKey.getItem() instanceof DiggerItem ? itemKey : null;
+        return DurableInputAdapters.wearDown(template);
     }
 
     /// Turns one aggregated ingredient into an AE2 input.

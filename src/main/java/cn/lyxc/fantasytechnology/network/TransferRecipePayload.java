@@ -6,6 +6,7 @@ import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.deviceaccess.DeviceAccessCheck;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
+import com.ae2vm.addon.crafting.DurableInputAdapters;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
 import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -17,7 +18,6 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.DiggerItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
@@ -178,7 +178,7 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
     /// items, fluids and chemicals are left alone.
     private static PatternIngredient ignoreDamageForTools(PatternIngredient ingredient) {
         if (ingredient.tag().isEmpty() && ingredient.what() instanceof AEItemKey itemKey) {
-            if (itemKey.toStack().isDamageableItem() || itemKey.getItem() instanceof DiggerItem) {
+            if (DurableInputAdapters.isWearableTool(itemKey)) {
                 return ingredient.withIgnoreData(true);
             }
         }

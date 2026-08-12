@@ -23,7 +23,7 @@ import appeng.util.inv.filter.IAEItemFilter;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
-import cn.lyxc.fantasytechnology.crafting.MolecularReusableInputAdapters;
+import com.ae2vm.addon.crafting.DurableInputAdapters;
 import cn.lyxc.fantasytechnology.integration.ae2.IFantasyBatchCraftingProvider;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
@@ -220,7 +220,7 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
                 }
                 IPatternDetails.IInput input = patternInputs[i];
                 for (var entry : inputHolder[i]) {
-                    AEKey remaining = MolecularReusableInputAdapters.wearDownBy(input, entry.getKey(), crafts);
+                    AEKey remaining = DurableInputAdapters.wearDownBy(input, entry.getKey(), crafts);
                     if (remaining != null) {
                         addChecked(stagedOutputs, remaining, entry.getLongValue());
                     }
