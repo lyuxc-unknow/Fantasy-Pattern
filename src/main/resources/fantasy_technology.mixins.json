@@ -8,14 +8,9 @@
     "minVersion": "0.5.3"
   },
   "mixins": [
-    "CraftingCpuLogicMixin",
-    "CraftingTaskProgressAccessor",
-    "ExecutingCraftingJobAccessor",
-    "KeyCounterMixin",
-    "OmniBatchCraftingProviderMixin",
-    "OmniCraftingCalculationMixin",
-    "OmniCraftingTreeNodeAccessor",
-    "OmniCraftingTreeProcessAccessor",
+    "MolecularBatchCraftingProviderMixin",
+    "OmniBatchDispatchMixin",
+    "OmniMaxFastPlannerMixin",
     "PatternProviderLogicMixin"
   ],
   "injectors": {

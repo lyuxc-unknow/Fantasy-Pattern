@@ -34,6 +34,8 @@
 | NeoForge **21.1.x** | ✅ | |
 | [Applied Energistics 2](https://modrinth.com/mod/ae2) | ✅ | `19.2.x` |
 | [JEI](https://modrinth.com/mod/jei) | ✅ | Required — recipe transfer into the encoding terminal |
+| [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite) | 🔶 Optional | `1.3.9+`; enables fast planning and batch dispatch |
+| [AE2-VM modified](https://github.com/lyuxc-unknow/AE2-VM-Fantasy-Pattern-Fork) | ✅ | Bundled; owns durable-input planning |
 | [Mekanism](https://modrinth.com/mod/mekanism) | 🔶 Optional | Chemical inputs/outputs in patterns |
 | [Applied Mekanistics](https://modrinth.com/mod/applied-mekanistics) | 🔶 Optional | Bridges chemicals into AE2 |
 
@@ -55,10 +57,8 @@ Without Mekanism/Applied Mekanistics the mod runs fine; chemical slots simply ar
 
 ## Compatibility notes
 
-- **Fast crafting plans** (adapted from [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite), MIT): with a **Fantasy Molecular Reconfiguration Pattern Provider** on the network, crafting calculations run through an aggregated recipe-tree planner — deep recursive trees (e.g. Mystical Agriculture's layered essence chains) are deduplicated into a graph and evaluated in one linear pass, and recipes that borrow a tool or container instead of consuming it take a specialized path (one tool borrowed, worn remains recycled). Anything the planner cannot prove equivalent is handed straight back to AE2, either as a single subtree or by abandoning the aggregate before any work has been delegated.
-- **Execution modes**: normal AE2 dispatch and OmniSequence's optional batch SPI both use the same instant path and fuel accounting. A batch of N repetitions consumes N of the 100,000 craft charges supplied by each Matter Ball by default. Fuel values use `item_id:crafts` entries in `annihilation_fuel_items`. `batch_dispatch_enabled` disables the optional OmniSequence batch entry point and takes effect after re-entering the world or restarting the game.
-- The aggregated planner is configured through `max_fast_mode`; `diagnostics` logs why it aggregated or fell back. In a local world these settings can also be edited from Fantasy Technology's Config button in NeoForge's mod list. The screen is read-only on remote servers and outside a world. License notice: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- **Coexistence with OmniSequence-Transfinite**: the aggregated planners continue to coexist; with OmniSequence present its batch SPI drives concurrent delivery, while without it this mod automatically uses the normal serialized CPU logic.
+- **Fast crafting plans** are provided by OmniSequence-Transfinite when installed and its Transfinite Computation Core is enabled. Fantasy patterns are admitted to its aggregated planner; planner modes, limits, diagnostics, fallback, and CPU accounting remain owned by Omni. Without OmniSequence, AE2 uses its normal calculation and dispatch behavior, with durable-input compatibility still supplied by the bundled `ae2vm-modified`.
+- **Batch execution** uses Omni's native batch dispatch when available. Durable and reusable inputs use the exact plan produced by Omni together with the bundled `ae2vm-modified`, including per-tool wear for tool pools. A batch of N repetitions consumes N fuel charges. When `consume_fuel=false`, the unbounded task is split into finite batches so deep recursive recipes cannot overflow compatibility paths. `batch_dispatch_enabled` can disable batching and takes effect after re-entering the world or restarting the game.
 - **Modern Industrialization & other machine mods**: recipe transfer uses the amounts JEI displays, so multi-count machine recipes (e.g. `2x iron plate`) fill in correctly.
 - **AllTheLeaks**: if a mod's `getIngredients()` has side effects that AllTheLeaks locks against, the server falls back to the displayed recipe instead of failing — the first occurrence logs a warning, and that recipe type is remembered for the session.
 - **JEI tag-information pages** (`minecraft:tag_recipes/*`) and the **P2P tunnel attunement page** (from the AE2-JEI-Integration addon) are blocked by default because they are browse-only pages, not recipes. The category-id list is configurable through `blocked_jei_category_ids` in the server config; changes require leaving and re-entering the world or restarting the game.

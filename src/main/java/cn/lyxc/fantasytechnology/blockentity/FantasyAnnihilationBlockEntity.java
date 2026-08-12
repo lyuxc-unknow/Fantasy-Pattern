@@ -24,7 +24,7 @@ import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
 import com.ae2vm.addon.crafting.DurableInputAdapters;
-import cn.lyxc.fantasytechnology.integration.ae2.IFantasyBatchCraftingProvider;
+import cn.lyxc.fantasytechnology.integration.ae2.FantasyBatchDispatchContext;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.registry.FTBlockEntities;
@@ -56,7 +56,7 @@ import java.util.Set;
 /// output delivery is deferred by one network tick because AE2 registers the CPU's waiting-for counter only after
 /// {@code pushPattern} returns.
 public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
-        implements ICraftingProvider, PatternContainer, IGridTickable, IFantasyBatchCraftingProvider {
+        implements ICraftingProvider, PatternContainer, IGridTickable {
 
     public static final int PATTERN_SLOTS = 36;
 
@@ -81,9 +81,6 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     @Nullable
     private List<IPatternDetails> patternCache;
-
-    /// Kept for the CPU batching compatibility hook. OmniSequence may arm this for a single batched push.
-    private long batchCrafts = 1;
 
     public FantasyAnnihilationBlockEntity(BlockPos pos, BlockState state) {
         this(FTBlockEntities.FANTASY_ANNIHILATION.get(), pos, state);
@@ -197,8 +194,7 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     @Override
     public boolean pushPattern(IPatternDetails patternDetails, KeyCounter[] inputHolder) {
-        if (!(patternDetails instanceof FantasyCraftingPattern pattern)
-                || batchCrafts < 1) {
+        if (!(patternDetails instanceof FantasyCraftingPattern pattern)) {
             return false;
         }
         IGrid grid = getMainNode().getGrid();
@@ -206,36 +202,25 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
             return false;
         }
 
+        var batchContext = FantasyBatchDispatchContext.current();
+        long crafts = batchContext == null ? 1 : batchContext.craftCount();
         KeyCounter stagedOutputs = new KeyCounter();
         try {
-            long crafts = batchCrafts;
             for (GenericStack output : pattern.getOutputs()) {
                 addChecked(stagedOutputs, output.what(), Math.multiplyExact(output.amount(), crafts));
             }
 
-            IPatternDetails.IInput[] patternInputs = pattern.getInputs();
-            for (int i = 0; i < inputHolder.length; i++) {
-                if (i >= patternInputs.length) {
-                    continue;
+            if (batchContext != null && batchContext.reusableRemainders() != null) {
+                for (var entry : batchContext.reusableRemainders()) {
+                    addChecked(stagedOutputs, entry.getKey(), entry.getLongValue());
                 }
-                IPatternDetails.IInput input = patternInputs[i];
-                for (var entry : inputHolder[i]) {
-                    AEKey remaining = DurableInputAdapters.wearDownBy(input, entry.getKey(), crafts);
-                    if (remaining != null) {
-                        addChecked(stagedOutputs, remaining, entry.getLongValue());
-                    }
-                }
+            } else {
+                stageSingleCraftRemainders(pattern, inputHolder, stagedOutputs);
             }
 
-            // Validate results and reusable-input returns before consuming a single ingredient.
-            var storage = grid.getStorageService().getInventory();
-            IActionSource source = IActionSource.ofMachine(this);
-            for (var entry : stagedOutputs) {
-                if (storage.insert(entry.getKey(), entry.getLongValue(), Actionable.SIMULATE, source)
-                        < entry.getLongValue()) {
-                    return false;
-                }
-            }
+            // Do not preflight these outputs against physical ME storage. AE2 registers the crafting CPU's
+            // waiting-for entries only after pushPattern returns, so a simulation here cannot see the primary
+            // destination for intermediate products and would reject large recursive batches that fit in the CPU.
             if (!canAppendPendingOutputs(stagedOutputs) || !canConsumeMatterBalls(crafts)) {
                 return false;
             }
@@ -249,10 +234,24 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
             counter.reset();
         }
         pendingOutputs.addAll(stagedOutputs);
-        consumeMatterBalls(batchCrafts);
+        consumeMatterBalls(crafts);
         saveChanges();
         wakeProcessingTick();
         return true;
+    }
+
+    private static void stageSingleCraftRemainders(FantasyCraftingPattern pattern, KeyCounter[] inputHolder,
+            KeyCounter stagedOutputs) {
+        IPatternDetails.IInput[] patternInputs = pattern.getInputs();
+        for (int i = 0; i < inputHolder.length && i < patternInputs.length; i++) {
+            IPatternDetails.IInput input = patternInputs[i];
+            for (var entry : inputHolder[i]) {
+                AEKey remaining = DurableInputAdapters.wearDownBy(input, entry.getKey(), 1);
+                if (remaining != null) {
+                    addChecked(stagedOutputs, remaining, entry.getLongValue());
+                }
+            }
+        }
     }
 
     private static void addChecked(KeyCounter counter, AEKey key, long amount) {
@@ -273,24 +272,43 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     }
 
     // ------------------------------------------------------------------------
-    // IFantasyBatchCraftingProvider: several instant recipes per push
+    // OmniSequence batch capacity
     // ------------------------------------------------------------------------
 
-    @Override
-    public long fantasyTechnology$batchLimit(IPatternDetails patternDetails) {
-        if (!(patternDetails instanceof FantasyCraftingPattern pattern) || getMainNode().getGrid() == null) {
+    public long getMaxBatchCrafts(FantasyCraftingPattern pattern, long requestedCrafts) {
+        if (getMainNode().getGrid() == null || !getAvailablePatterns().contains(pattern)) {
             return 0;
         }
-        return getMaxBatchCrafts(pattern, Long.MAX_VALUE);
-    }
-
-    public long getMaxBatchCrafts(FantasyCraftingPattern pattern, long requestedCrafts) {
         long limit = Math.min(Math.max(0, requestedCrafts),
                 FTConfig.CONSUME_FUEL.get() ? getMatterBallCharges() : Long.MAX_VALUE);
         try {
+            // Omni and AE2 account crafting quantities with longs. The provider limit must stay large enough to keep
+            // deep recursive jobs aggregated, while still leaving room for every per-craft input and output amount
+            // to be scaled and accumulated without overflowing a KeyCounter.
+            long totalInputAmount = 0;
+            for (IPatternDetails.IInput input : pattern.getInputs()) {
+                long amount = input.getMultiplier();
+                if (amount <= 0) {
+                    return 0;
+                }
+                totalInputAmount = Math.addExact(totalInputAmount, amount);
+            }
+            long totalOutputAmount = 0;
+            for (GenericStack output : pattern.getOutputs()) {
+                if (output.amount() <= 0) {
+                    return 0;
+                }
+                totalOutputAmount = Math.addExact(totalOutputAmount, output.amount());
+            }
+            long perCraftAmount = Math.addExact(totalInputAmount, totalOutputAmount);
+            if (perCraftAmount <= 0) {
+                return 0;
+            }
+            limit = Math.min(limit, Long.MAX_VALUE / perCraftAmount);
+
             for (GenericStack output : pattern.getOutputs()) {
                 long queued = pendingOutputs.get(output.what());
-                if (queued < 0 || output.amount() <= 0) {
+                if (queued < 0) {
                     return 0;
                 }
                 limit = Math.min(limit, (Long.MAX_VALUE - queued) / output.amount());
@@ -299,64 +317,6 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         } catch (ArithmeticException exception) {
             return 0;
         }
-    }
-
-    /**
-     * Commits a validated OmniSequence batch to the same next-tick output queue used by a normal push.
-     * OmniSequence has already extracted the complete input holder and validated the expected output counter before
-     * calling this method. The block entity still checks its matter-ball balance so a stale admission cannot consume
-     * materials after another request spent the available fuel.
-     */
-    public boolean acceptOmniBatch(KeyCounter stagedOutputs, long crafts) {
-        IGrid grid = getMainNode().getGrid();
-        if (crafts < 2 || stagedOutputs == null || stagedOutputs.isEmpty()
-                || grid == null || !canConsumeMatterBalls(crafts) || !canAppendPendingOutputs(stagedOutputs)) {
-            return false;
-        }
-        long previousCharges = matterBallCharges;
-        ItemStack previousMatterBalls = matterBallInv.getStackInSlot(0).copy();
-        KeyCounter previousOutputs = new KeyCounter();
-        previousOutputs.addAll(pendingOutputs);
-        boolean queued = false;
-        try {
-            KeyCounter checked = new KeyCounter();
-            for (var entry : stagedOutputs) {
-                addChecked(checked, entry.getKey(), entry.getLongValue());
-            }
-            queued = true;
-            pendingOutputs.addAll(checked);
-            consumeMatterBalls(crafts);
-            saveChanges();
-            wakeProcessingTick();
-            return true;
-        } catch (RuntimeException exception) {
-            // The admission is still rejectable until it returns. Restore the queue and fuel state so OmniSequence
-            // can safely reinject the inputs.
-            if (queued) {
-                pendingOutputs.reset();
-                pendingOutputs.addAll(previousOutputs);
-                matterBallCharges = previousCharges;
-                consumingMatterBallSlot = true;
-                try {
-                    matterBallInv.setItemDirect(0, previousMatterBalls);
-                } catch (RuntimeException ignored) {
-                    // Preserve the original failure as the admission result.
-                } finally {
-                    consumingMatterBallSlot = false;
-                }
-            }
-            return false;
-        }
-    }
-
-    @Override
-    public void fantasyTechnology$beginBatch(long crafts) {
-        batchCrafts = Math.max(1, crafts);
-    }
-
-    @Override
-    public void fantasyTechnology$endBatch() {
-        batchCrafts = 1;
     }
 
     // ------------------------------------------------------------------------

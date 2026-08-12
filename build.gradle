@@ -149,8 +149,8 @@ dependencies {
     // https://www.curseforge.com/minecraft/mc-mods/ae2-jei-integration
     localRuntime "curse.maven:ae2-jei-integration-${ae2_jei_integration_project}:${ae2_jei_integration_file}"
 
-    compileOnly "curse.maven:omnisequence-transfinite-1624558:8580768"
-    localRuntime "curse.maven:omnisequence-transfinite-1624558:8580768"
+    compileOnly "curse.maven:omnisequence-transfinite-1624558:8622739"
+    localRuntime "curse.maven:omnisequence-transfinite-1624558:8622739"
     implementation(jarJar("com.ae2vm.addon:ae2vm:1.10.8+modified"))
 
     // Compatibility verification

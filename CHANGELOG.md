@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.13 - 2026-08-12
+
+This release moves fast planning and batch execution onto OmniSequence's native compatibility interfaces and fixes deep recursive crafts when fuel consumption is disabled.
+
+### Changed
+
+- Replaced the copied OmniSequence planner and crafting-CPU implementations with narrowly scoped compatibility Mixins. When OmniSequence-Transfinite 1.3.9 or newer is installed and its Transfinite Computation Core is enabled, it owns fast planning, batch extraction, dispatch and CPU accounting for fantasy patterns.
+- OmniSequence-Transfinite remains optional. Without it, crafting calculations and dispatch fall back to AE2's normal behavior; durable and reusable input compatibility remains provided by the bundled `ae2vm-modified` component.
+- Omni batches now use Omni's reusable-input plan directly, including the exact returned remainder and per-tool wear for durable tool pools.
+- Removed the local `max_fast_mode`, planner node/time budget and planner diagnostics settings because those concerns are now owned by OmniSequence. `batch_dispatch_enabled` remains available for disabling the optional batch path.
+
+### Fixed
+
+- Fixed deep recursive crafts, such as sixteen-times compressed cobblestone, blocking the server thread when `consume_fuel=false`. Batch limits now retain long-sized aggregation while applying overflow-safe bounds instead of expanding the request into thousands of small synchronous batches.
+- Fixed those same large batches remaining stuck without dispatch after the thread-blocking issue was removed. Intermediate outputs are no longer rejected against physical ME storage before AE2 has registered the crafting CPU as their destination; delivery remains deferred until the CPU is ready, and any unaccepted remainder stays queued without item loss.
+
 ## 1.0.12 - 2026-08-11
 
 This release expands Fantasy Pattern from a universal recipe encoder into a configurable, ME-native instant-crafting pipeline with device ownership checks and safer server-side transfer handling.

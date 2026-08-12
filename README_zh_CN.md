@@ -35,6 +35,8 @@
 | NeoForge **21.1.x** | ✅ | |
 | [Applied Energistics 2](https://modrinth.com/mod/ae2) | ✅ | `19.2.x` |
 | [JEI](https://modrinth.com/mod/jei) | ✅ 必需 | 向编码终端转移配方 |
+| [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite) | 🔶 可选 | `1.3.9+`；启用快速规划与批量发配 |
+| [AE2-VM modified](https://github.com/lyuxc-unknow/AE2-VM-Fantasy-Pattern-Fork) | ✅ | 内嵌；负责耐久输入规划 |
 | [Mekanism](https://modrinth.com/mod/mekanism) | 🔶 可选 | 样板中的化学品输入/输出 |
 | [Applied Mekanistics](https://modrinth.com/mod/applied-mekanistics) | 🔶 可选 | 把化学品桥接进 AE2 |
 
@@ -56,10 +58,8 @@
 
 ## 兼容性说明
 
-- **快速合成规划**（改编自 [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite)，MIT）：当网络上存在**幻梦分子重构演算样板供应器**时，合成计算会启用"配方树聚合"规划器——递归深树（如神秘农业的层层精华合成）去重成图后一次线性遍历；只借用而不消耗工具/容器的配方走特化路径（工具只借 1 份、磨损物回收）。凡是无法证明与原版等价的部分都会交还 AE2：要么单独退化成一棵子树，要么在尚未委派任何工作之前整体放弃聚合。
-- **执行模式**：普通 AE2 发配与 OmniSequence 的可选批量 SPI 都走同一套即时合成和燃料计费逻辑。批量合成 N 次会消耗 N 次额度，默认每个物质球提供 100,000 次额度；`annihilation_fuel_items` 使用 `物品ID:次数` 条目。`batch_dispatch_enabled` 可关闭可选的 OmniSequence 批量入口，修改配置后需要重新进入存档或重启游戏。
-- 聚合规划器通过服务端配置 `max_fast_mode` 控制；`diagnostics` 可输出规划器聚合/回退的原因。在本地单人存档中，也可通过 NeoForge 模组列表中幻想科技的“配置”按钮修改；远程服务器或未进入存档时配置页为只读。版权声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-- **与 OmniSequence-Transfinite 共存**：两套聚合规划器仍可共存；OmniSequence 存在时由其批量 SPI 驱动并发交付，缺少 OmniSequence 时自动回退到本模组的普通串行 CPU 逻辑。
+- **快速合成规划**在安装 OmniSequence 并启用万物演算核心时由 Omni 提供。幻梦样板会进入其配方树聚合规划器；规划模式、节点与时间预算、诊断、回退和 CPU 记账均由 Omni 负责。未安装 OmniSequence 时，AE2 使用自身的普通计算与发配行为，耐久输入兼容仍由内嵌 `ae2vm-modified` 提供。
+- **批量执行**在 Omni 可用时使用其原生批量发配。耐久与可复用输入直接采用 Omni 与内嵌 `ae2vm-modified` 生成的精确计划，包括工具池中每把工具的磨损。批量合成 N 次消耗 N 次燃料额度。当 `consume_fuel=false` 时，无限任务会拆分为有限批次，避免深层递归配方在兼容路径中发生整数溢出；`batch_dispatch_enabled` 仍可关闭批量发配，修改后需要重新进入存档或重启游戏。
 - **现代化工业及其他机器模组**：配方转移使用 JEI 显示的数量，多数量机器配方（如 `2x 铁板`）可正确填入。
 - **AllTheLeaks**：若某模组的 `getIngredients()` 具有 AllTheLeaks 锁定的副作用，服务端会回退到显示配方而不是失败——首次发生会记录一条警告，并在本次会话内记住该配方类型。
 - **JEI tag 信息页**（`minecraft:tag_recipes/*`）与 **P2P 谐调页面**（来自 AE2-JEI-Integration 附属）默认禁止转移，因为它们只是浏览页，并非配方。可在服务端配置中通过 `blocked_jei_category_ids` 配置 category ID 列表；修改后需要退出并重新进入存档或重启游戏。

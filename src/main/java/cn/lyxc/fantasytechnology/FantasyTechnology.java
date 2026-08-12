@@ -38,7 +38,7 @@ public class FantasyTechnology {
     // The constructor for the mod class is the first code that is run when your mod is loaded.
     // FML will recognize some parameter types like IEventBus or ModContainer and pass them in automatically.
     public FantasyTechnology(IEventBus modEventBus, ModContainer modContainer) {
-        // Server-side config for the aggregated crafting planner and batch dispatch (adapted from OmniSequence).
+        // Server-side config for fantasy devices and optional OmniSequence batch dispatch.
         modContainer.registerConfig(ModConfig.Type.SERVER, FTConfig.SPEC);
 
         // Load registry classes so their static content gets registered.
