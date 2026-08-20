@@ -56,6 +56,8 @@ Without Mekanism/Applied Mekanistics the mod runs fine; chemical slots simply ar
 
 ### Server recipe-provider DSL
 
+For the complete datapack authoring reference, see [Datapack Authoring Guide](docs/DATAPACK_EN_US.md).
+
 Datapacks can add trusted recipes under `data/<namespace>/recipe_provider/*.json`. The file path is the recipe id; this example registers `example:washing/iron`:
 
 ```json

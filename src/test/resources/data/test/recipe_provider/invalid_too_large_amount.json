@@ -1,0 +1,14 @@
+{
+  "inputs": [
+    {
+      "type": "minecraft:fluid",
+      "id": "minecraft:water",
+      "amount": 2147483648
+    }
+  ],
+  "outputs": [
+    {
+      "id": "minecraft:stone"
+    }
+  ]
+}

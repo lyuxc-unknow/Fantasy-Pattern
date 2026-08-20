@@ -1,0 +1,22 @@
+{
+  "category": "test:chemical",
+  "inputs": [
+    {
+      "type": "mekanism:chemical",
+      "id": "mekanism:oxygen",
+      "amount": 1000
+    },
+    {
+      "id": "minecraft:redstone",
+      "amount": 3
+    }
+  ],
+  "outputs": [
+    {
+      "type": "mekanism:chemical",
+      "id": "mekanism:hydrogen",
+      "amount": 500
+    }
+  ],
+  "catalysts": ["minecraft:iron_block"]
+}

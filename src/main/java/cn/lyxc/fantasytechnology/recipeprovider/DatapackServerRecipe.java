@@ -3,7 +3,9 @@ package cn.lyxc.fantasytechnology.recipeprovider;
 import appeng.api.stacks.GenericStack;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
+import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -21,7 +23,7 @@ public record DatapackServerRecipe(ResourceLocation category, List<RecipeStackDe
     public static final ResourceLocation DEFAULT_CATEGORY = ResourceLocation.fromNamespaceAndPath(
             FantasyTechnology.MODID, "datapack");
 
-    public static final Codec<DatapackServerRecipe> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+    private static final Codec<DatapackServerRecipe> RAW_CODEC = RecordCodecBuilder.create(instance -> instance.group(
             ResourceLocation.CODEC.optionalFieldOf("category", DEFAULT_CATEGORY)
                     .forGetter(DatapackServerRecipe::category),
             RecipeStackDefinition.CODEC.listOf().fieldOf("inputs").forGetter(DatapackServerRecipe::inputs),
@@ -29,6 +31,25 @@ public record DatapackServerRecipe(ResourceLocation category, List<RecipeStackDe
             ResourceLocation.CODEC.listOf().optionalFieldOf("catalysts", List.of())
                     .forGetter(DatapackServerRecipe::catalysts))
             .apply(instance, DatapackServerRecipe::new));
+    public static final Codec<DatapackServerRecipe> CODEC = RAW_CODEC.validate(DatapackServerRecipe::validate);
+
+    private static DataResult<DatapackServerRecipe> validate(DatapackServerRecipe recipe) {
+        if (recipe.inputs.isEmpty() || recipe.outputs.isEmpty()) {
+            return DataResult.error(() -> "A server recipe needs at least one input and one output");
+        }
+        if (recipe.inputs.size() > FantasyPatternData.MAX_INPUTS) {
+            return DataResult.error(() -> "A server recipe allows at most "
+                    + FantasyPatternData.MAX_INPUTS + " inputs");
+        }
+        if (recipe.outputs.size() > FantasyPatternData.MAX_OUTPUTS) {
+            return DataResult.error(() -> "A server recipe allows at most "
+                    + FantasyPatternData.MAX_OUTPUTS + " outputs");
+        }
+        if (recipe.outputs.stream().anyMatch(output -> output.tag().isPresent())) {
+            return DataResult.error(() -> "Output stacks cannot use tags");
+        }
+        return DataResult.success(recipe);
+    }
 
     public ServerRecipe resolve(ResourceLocation recipeId) {
         List<PatternIngredient> resolvedInputs = inputs.stream()

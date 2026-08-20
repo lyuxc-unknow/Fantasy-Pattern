@@ -122,6 +122,10 @@ repositories {
 }
 
 dependencies {
+    testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.2"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.2"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.10.2"
+
     // Applied Energistics 2: compile against the mod jar, and load the full mod in dev runs
     compileOnly "maven.modrinth:ae2:${ae2_version}"
     // We add the full version to localRuntime, not runtimeOnly, so that we do not publish a dependency on it
@@ -163,6 +167,15 @@ dependencies {
     localRuntime "maven.modrinth:ldlib:mc1.21.1-2.2.32-neoforge"
     localRuntime "curse.maven:glodium-957920:5821676"
     localRuntime "curse.maven:ex-pattern-provider-892005:8511901"
+}
+
+// ModDev wires Minecraft and optional-mod APIs to the main source set only. Codec unit tests exercise those API
+// types directly, so give the test source set the same transformed compile/runtime classpaths.
+sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
+sourceSets.test.runtimeClasspath += sourceSets.main.runtimeClasspath
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

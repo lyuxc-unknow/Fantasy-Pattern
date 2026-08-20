@@ -57,6 +57,8 @@
 
 ### 服务端配方供应器 DSL
 
+完整的数据包编写说明请参阅：[数据包编写指南](docs/DATAPACK_ZH_CN.md)。
+
 数据包可在 `data/<命名空间>/recipe_provider/*.json` 中补充服务端可信配方。文件路径本身就是配方 ID；下例会注册 `example:washing/iron`：
 
 ```json

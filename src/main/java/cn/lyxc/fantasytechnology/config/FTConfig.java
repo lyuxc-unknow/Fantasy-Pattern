@@ -51,8 +51,8 @@ public final class FTConfig {
                 .translation("fantasy_technology.configuration.trust_server_recipe_parsing")
                 .define("trust_server_recipe_parsing", false);
         DEVICE_ACCESS_MODE = BUILDER
-                .comment("Whether encoding a recipe in the fantasy encoding terminal requires owning the machine.",
-                        "REQUIRE_DEVICES: a recipe may only be transferred when the network's device access blocks",
+                .comment("Whether selecting or filling a recipe in the fantasy encoding terminal requires owning the machine.",
+                        "REQUIRE_DEVICES: a recipe may only be selected or transferred when device access blocks",
                         "hold what it needs - a rule from data/<namespace>/device_access/ if one covers",
                         "the recipe, otherwise four of the recipe category's own catalysts.",
                         "UNRESTRICTED: no such check; the blocks stay usable as storage.")

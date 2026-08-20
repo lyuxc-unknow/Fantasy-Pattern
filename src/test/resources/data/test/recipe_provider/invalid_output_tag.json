@@ -1,0 +1,13 @@
+{
+  "inputs": [
+    {
+      "id": "minecraft:iron_ingot"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "minecraft:gold_ingot",
+      "tag": "c:ingots/gold"
+    }
+  ]
+}

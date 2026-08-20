@@ -1,0 +1,12 @@
+{
+  "inputs": [
+    {
+      "id": "minecraft:coal"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "minecraft:torch"
+    }
+  ]
+}
