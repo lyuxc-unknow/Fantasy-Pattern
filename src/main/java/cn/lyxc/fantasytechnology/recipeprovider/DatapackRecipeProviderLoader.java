@@ -28,8 +28,8 @@ public final class DatapackRecipeProviderLoader extends SimpleJsonResourceReload
     }
 
     @Override
-    protected void apply(Map<ResourceLocation, JsonElement> files, @NotNull ResourceManager resourceManager,
-            @NotNull ProfilerFiller profiler) {
+    protected void apply(@NotNull Map<ResourceLocation, JsonElement> files, @NotNull ResourceManager resourceManager,
+                         @NotNull ProfilerFiller profiler) {
         ServerRecipeProviders.setDatapackSource(registryAccess, conditionContext, files);
     }
 }
