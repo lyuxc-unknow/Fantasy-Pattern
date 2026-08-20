@@ -68,6 +68,11 @@ public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferH
     public IRecipeTransferError transferRecipe(FantasyEncodingTermMenu container, Object recipe,
             IRecipeSlotsView recipeSlots, Player player, boolean maxTransfer, boolean doTransfer) {
 
+        if (container.trustServerRecipeParsing) {
+            return helper.createUserErrorWithTooltip(Component.translatable(
+                    "gui.fantasy_technology.transfer_server_provider_only"));
+        }
+
         var category = JeiRecipeCategoryIndex.categoryOf(recipe);
         ResourceLocation categoryUid = category == null ? null : category.uid();
         if (isBlocked(categoryUid)) {

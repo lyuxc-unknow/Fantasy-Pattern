@@ -15,6 +15,7 @@ public final class FTConfig {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.BooleanValue BATCH_DISPATCH_ENABLED;
+    public static final ModConfigSpec.BooleanValue TRUST_SERVER_RECIPE_PARSING;
     public static final ModConfigSpec.EnumValue<DeviceAccessMode> DEVICE_ACCESS_MODE;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> BLOCKED_JEI_CATEGORY_IDS;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> ANNIHILATION_FUEL_ITEMS;
@@ -39,6 +40,16 @@ public final class FTConfig {
                         "Changes require re-entering the world or restarting the game.")
                 .translation("fantasy_technology.configuration.batch_dispatch_enabled")
                 .define("batch_dispatch_enabled", true);
+        TRUST_SERVER_RECIPE_PARSING = BUILDER
+                .comment("Use only recipes parsed by trusted providers on the logical server.",
+                        "When enabled, JEI recipe transfer is disabled and the encoding terminal exposes its own",
+                        "server-backed recipe browser. By default that browser contains crafting-table recipes plus",
+                        "entries from data/<namespace>/recipe_provider/*.json.",
+                        "WARNING: the two pattern kinds are mutually exclusive, so changing this invalidates every",
+                        "fantasy pattern already encoded in the world. Existing patterns keep their items but stop",
+                        "crafting and can no longer be edited or inserted into a provider until it is changed back.")
+                .translation("fantasy_technology.configuration.trust_server_recipe_parsing")
+                .define("trust_server_recipe_parsing", false);
         DEVICE_ACCESS_MODE = BUILDER
                 .comment("Whether encoding a recipe in the fantasy encoding terminal requires owning the machine.",
                         "REQUIRE_DEVICES: a recipe may only be transferred when the network's device access blocks",

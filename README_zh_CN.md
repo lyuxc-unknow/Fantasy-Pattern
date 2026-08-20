@@ -16,6 +16,7 @@
 ### 🖥️ 幻梦编码终端
 - 一个 ME 终端部件（像其他终端一样接在你的网络上），侧边带有完整网络物品列表。
 - **一键转移任意 JEI 配方**到编码网格——熔炼、切石、以及模组机器配方类别都能用，不止原版合成。数量始终以 JEI 显示为准（因此现代化工业等机器模组的多数量配方也能正确转移），tag 会从服务端配方还原。
+- 服务端可启用 `trust_server_recipe_parsing`（默认 `false`）。启用后 JEI 转移被禁用，终端会显示内置的**服务端配方供应器**按钮；客户端只提交供应器 ID 与配方 ID，原料、产物、tag 和数量全部由服务端重新解析。编码后的可信样板会记录不暴露配方内容的配方指纹，服务端在请求原料和真正执行合成前再次查找并校验对应配方。可信样板与 JEI/客户端鉴权样板互相禁用。内置供应器默认只公开固定产物的工作台配方。
 - **翻倍按钮**：一次性把全部已编码数量翻倍，带全有或全无的溢出保护（任一条目超过 int 上限则整次点击取消）。物品数量可超过堆叠上限，与 AE2 原版样板终端一致。
 - 产物槽是自由幽灵槽；原料槽为预览专用，避免 tag 信息丢失。
 
@@ -47,12 +48,35 @@
 ## 使用方法
 
 1. **合成一张空白幻梦样板**（`ae2:blank_pattern` + 紫水晶碎片），放进幻梦编码终端。
-2. 在 JEI 中打开配方，按下转移按钮（`+`）——原料与产物自动填入，tag 与数量一并保留。
+2. 默认模式下在 JEI 中按转移按钮（`+`）；启用服务端可信解析时，改用终端编码区右侧的工作台图标打开内置配方供应器。
 3. 可选：按下产物旁边的**翻倍按钮**放大配方。
 4. 按下**编码**——空白幻梦样板变成已编码的幻梦重组样板。
 5. 把已编码样板与 AE2 物质球放进连接 ME 网络的**幻梦分子重构演算样板供应器**方块。从任意终端请求产物：默认每个物质球可支持 100,000 次即时合成。
 
 **提示：** 悬停在物品栏中的已编码样板上，tooltip 会显示完整配方（原料与产物）。
+
+### 服务端配方供应器 DSL
+
+数据包可在 `data/<命名空间>/recipe_provider/*.json` 中补充服务端可信配方。文件路径本身就是配方 ID；下例会注册 `example:washing/iron`：
+
+```json
+{
+  "category": "example:washer",
+  "inputs": [
+    { "id": "minecraft:iron_ingot", "amount": 2, "tag": "c:ingots/iron" },
+    { "type": "minecraft:fluid", "id": "minecraft:water", "amount": 1000 }
+  ],
+  "outputs": [
+    { "id": "minecraft:gold_ingot", "amount": 1 }
+  ],
+  "catalysts": ["example:washer"]
+}
+```
+
+- `type` 默认为 `minecraft:item`，内置支持 `minecraft:fluid`；同时安装 Mekanism 与 Applied Mekanistics 时支持 `mekanism:chemical`。例如 `{ "type": "mekanism:chemical", "id": "mekanism:oxygen", "amount": 1000 }`。
+- 输入可带 `tag` 与 `ignore_data`；输出可带 `ignore_data`，但不能使用 tag。数量必须为正数，并继续受单张样板 81 个输入、6 个输出的上限约束。
+- `category` 用于既有的 `device_access` 规则；没有匹配规则时，`catalysts` 是四设备回退检查所使用的物品列表。也可在 `device_access` 中按该文件的配方 ID 单独定义设备要求。
+- 文件支持标准顶层 `neoforge:conditions`。其他 AE Key 桥接模组可通过 `RecipeStackDefinition.registerResolver` 注册新的 `type`，无需修改 DSL 或网络协议。
 
 ---
 

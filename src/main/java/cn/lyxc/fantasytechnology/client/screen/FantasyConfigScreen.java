@@ -24,6 +24,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
     private boolean editable;
 
     private Button batchDispatchButton;
+    private Button trustServerParsingButton;
     private Button deviceAccessButton;
     private Button blockedCategoriesButton;
     private Button fuelItemsButton;
@@ -51,6 +52,12 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
             button.setMessage(toggleName(draft.batchDispatch));
         }).width(CONTROL_WIDTH).build();
         addRow("fantasy_technology.configuration.batch_dispatch_enabled", this.batchDispatchButton);
+
+        this.trustServerParsingButton = Button.builder(toggleName(draft.trustServerParsing), button -> {
+            draft.trustServerParsing = !draft.trustServerParsing;
+            button.setMessage(toggleName(draft.trustServerParsing));
+        }).width(CONTROL_WIDTH).build();
+        addRow("fantasy_technology.configuration.trust_server_recipe_parsing", this.trustServerParsingButton);
 
         this.deviceAccessButton = Button.builder(deviceAccessName(draft.deviceAccessMode), button -> {
             draft.deviceAccessMode = next(draft.deviceAccessMode, DeviceAccessMode.values());
@@ -123,6 +130,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
 
     private void save() {
         FTConfig.BATCH_DISPATCH_ENABLED.set(draft.batchDispatch);
+        FTConfig.TRUST_SERVER_RECIPE_PARSING.set(draft.trustServerParsing);
         FTConfig.DEVICE_ACCESS_MODE.set(draft.deviceAccessMode);
         FTConfig.BLOCKED_JEI_CATEGORY_IDS.set(List.copyOf(draft.blockedCategoryIds));
         FTConfig.ANNIHILATION_FUEL_ITEMS.set(List.copyOf(draft.fuelItems));
@@ -134,6 +142,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
     private void resetDraft() {
         draft.reset();
         batchDispatchButton.setMessage(toggleName(draft.batchDispatch));
+        trustServerParsingButton.setMessage(toggleName(draft.trustServerParsing));
         deviceAccessButton.setMessage(deviceAccessName(draft.deviceAccessMode));
         updateBlockedCategoriesButton();
         updateFuelItemsButton();
@@ -203,6 +212,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
 
     private static final class Draft {
         private boolean batchDispatch;
+        private boolean trustServerParsing;
         private DeviceAccessMode deviceAccessMode;
         private List<String> blockedCategoryIds;
         private List<String> fuelItems;
@@ -212,6 +222,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
             var draft = new Draft();
             if (FTConfig.SPEC.isLoaded()) {
                 draft.batchDispatch = FTConfig.BATCH_DISPATCH_ENABLED.get();
+                draft.trustServerParsing = FTConfig.TRUST_SERVER_RECIPE_PARSING.get();
                 draft.deviceAccessMode = FTConfig.DEVICE_ACCESS_MODE.get();
                 draft.blockedCategoryIds = new ArrayList<>(FTConfig.BLOCKED_JEI_CATEGORY_IDS.get());
                 draft.fuelItems = new ArrayList<>(FTConfig.ANNIHILATION_FUEL_ITEMS.get());
@@ -224,6 +235,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
 
         private void reset() {
             this.batchDispatch = FTConfig.BATCH_DISPATCH_ENABLED.getDefault();
+            this.trustServerParsing = FTConfig.TRUST_SERVER_RECIPE_PARSING.getDefault();
             this.deviceAccessMode = FTConfig.DEVICE_ACCESS_MODE.getDefault();
             this.blockedCategoryIds = new ArrayList<>(FTConfig.DEFAULT_BLOCKED_JEI_CATEGORY_IDS);
             this.fuelItems = new ArrayList<>(FTConfig.DEFAULT_ANNIHILATION_FUEL_ITEMS);

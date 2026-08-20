@@ -16,6 +16,7 @@
 ### 🖥️ Fantasy Encoding Terminal
 - An ME terminal part (attach it to your network like any terminal) with the full network item list on the side.
 - **Transfer any JEI recipe** into the encoding grid with one click — smelting, stonecutting, and modded machine categories work, not just vanilla crafting. Amounts always come from what JEI shows (so machine mods such as Modern Industrialization transfer correct counts), and tags are restored from the server-side recipe.
+- Servers can enable `trust_server_recipe_parsing` (default `false`). This disables JEI transfer and adds the terminal's built-in **Server Recipe Provider** button. The client submits only a provider id and recipe id; the server resolves every input, output, tag, and amount. Encoded trusted patterns carry an opaque recipe fingerprint, and the server resolves it again before requesting inputs and executing a craft. The built-in provider exposes only fixed-output crafting-table recipes by default. Trusted and JEI/client-authenticated patterns are mutually disabled.
 - Result slots are free ghost slots; ingredients are preview-only so tags are never lost.
 
 ### ⚡ Fantasy Molecular Reconfiguration Pattern Provider
@@ -46,12 +47,35 @@ Without Mekanism/Applied Mekanistics the mod runs fine; chemical slots simply ar
 ## Usage
 
 1. **Craft a Blank Fantasy Pattern** (`ae2:blank_pattern` + amethyst shard) and place it in the Fantasy Encoding Terminal.
-2. Open a recipe in JEI and press the transfer button (the `+`) — inputs and results are filled in, tags and amounts preserved.
+2. In the default mode, use JEI's transfer button (`+`). With trusted server parsing enabled, use the crafting-table icon beside the terminal's encoding area instead.
 3. Optionally press the **double button** next to the results to scale the recipe up.
 4. Press **Encode** — the blank fantasy pattern becomes an encoded Fantasy Recombination Pattern.
 5. Place encoded patterns and AE2 Matter Balls in a **Fantasy Molecular Reconfiguration Pattern Provider** connected to your ME network. Request the pattern's output from any terminal; by default, each Matter Ball powers 100,000 instant crafts.
 
 **Tip:** hovering an encoded pattern in your inventory shows its full recipe (ingredients and results) in the tooltip.
+
+### Server recipe-provider DSL
+
+Datapacks can add trusted recipes under `data/<namespace>/recipe_provider/*.json`. The file path is the recipe id; this example registers `example:washing/iron`:
+
+```json
+{
+  "category": "example:washer",
+  "inputs": [
+    { "id": "minecraft:iron_ingot", "amount": 2, "tag": "c:ingots/iron" },
+    { "type": "minecraft:fluid", "id": "minecraft:water", "amount": 1000 }
+  ],
+  "outputs": [
+    { "id": "minecraft:gold_ingot", "amount": 1 }
+  ],
+  "catalysts": ["example:washer"]
+}
+```
+
+- `type` defaults to `minecraft:item`; `minecraft:fluid` is built in, and `mekanism:chemical` is available when Mekanism and Applied Mekanistics are both loaded. For example: `{ "type": "mekanism:chemical", "id": "mekanism:oxygen", "amount": 1000 }`.
+- Inputs may use `tag` and `ignore_data`. Outputs may use `ignore_data` but not tags. Amounts must be positive, with the normal per-pattern limits of 81 inputs and 6 outputs.
+- `category` participates in existing `device_access` rules. When no rule matches, `catalysts` supplies the items used by the four-device fallback. A `device_access` rule may instead target this file's recipe id directly.
+- Standard top-level `neoforge:conditions` are supported. Other AE-key bridge mods can register additional `type` resolvers through `RecipeStackDefinition.registerResolver` without changing the DSL or network protocol.
 
 ---
 

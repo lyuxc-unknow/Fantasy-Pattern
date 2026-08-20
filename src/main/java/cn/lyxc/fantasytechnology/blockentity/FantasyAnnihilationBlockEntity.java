@@ -81,6 +81,8 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     @Nullable
     private List<IPatternDetails> patternCache;
+    private boolean patternCacheTrustMode;
+    private boolean patternCacheModeInitialized;
 
     public FantasyAnnihilationBlockEntity(BlockPos pos, BlockState state) {
         this(FTBlockEntities.FANTASY_ANNIHILATION.get(), pos, state);
@@ -179,23 +181,50 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     @Override
     public List<IPatternDetails> getAvailablePatterns() {
-        if (patternCache == null) {
-            Set<IPatternDetails> patterns = new LinkedHashSet<>();
-            for (int i = 0; i < patternInv.size(); i++) {
-                FantasyPatternData data = FantasyPatternItem.getData(patternInv.getStackInSlot(i));
-                if (data != null && data.isCraftable()) {
-                    patterns.add(new FantasyCraftingPattern(AEItemKey.of(patternInv.getStackInSlot(i)), data));
-                }
-            }
-            patternCache = List.copyOf(patterns);
+        boolean trusted = FTConfig.TRUST_SERVER_RECIPE_PARSING.get();
+        if (!patternCacheModeInitialized || patternCacheTrustMode != trusted) {
+            patternCache = null;
+            patternCacheTrustMode = trusted;
+            patternCacheModeInitialized = true;
         }
-        return patternCache;
+        // Trusted patterns are resolved against the current server recipe catalogue on every provider query. This is
+        // the last point before AE2 plans its input request, so datapack/recipe reloads cannot leave an old recipe
+        // active in a cached pattern.
+        if (!trusted && patternCache != null) {
+            return patternCache;
+        }
+        Set<IPatternDetails> patterns = new LinkedHashSet<>();
+        for (int i = 0; i < patternInv.size(); i++) {
+            ItemStack stack = patternInv.getStackInSlot(i);
+            FantasyPatternData data = FantasyPatternItem.getData(stack);
+            if (data == null || !data.isCraftable() || data.serverRecipeToken().isPresent() != trusted) {
+                continue;
+            }
+            FantasyCraftingPattern pattern = FantasyCraftingPattern.decode(AEItemKey.of(stack), level);
+            if (pattern != null) {
+                patterns.add(pattern);
+            }
+        }
+        List<IPatternDetails> result = List.copyOf(patterns);
+        if (!trusted) {
+            patternCache = result;
+        }
+        return result;
     }
 
     @Override
     public boolean pushPattern(IPatternDetails patternDetails, KeyCounter[] inputHolder) {
         if (!(patternDetails instanceof FantasyCraftingPattern pattern)) {
             return false;
+        }
+        // Re-resolve immediately before accepting the extracted inputs. The provider query already does this, but a
+        // recipe reload or another server-side change may happen between planning and dispatch.
+        if (pattern.getData().serverRecipeToken().isPresent()) {
+            FantasyCraftingPattern current = FantasyCraftingPattern.decode(pattern.getDefinition(), level);
+            if (current == null || !current.getData().equals(pattern.getData())) {
+                return false;
+            }
+            pattern = current;
         }
         IGrid grid = getMainNode().getGrid();
         if (grid == null) {
@@ -516,7 +545,12 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     private static class PatternSlotFilter implements IAEItemFilter {
         @Override
         public boolean allowInsert(InternalInventory inv, int slot, ItemStack stack) {
-            return stack.getItem() instanceof FantasyPatternItem;
+            if (!(stack.getItem() instanceof FantasyPatternItem)) {
+                return false;
+            }
+            FantasyPatternData data = FantasyPatternItem.getData(stack);
+            return data != null
+                    && data.serverRecipeToken().isPresent() == FTConfig.TRUST_SERVER_RECIPE_PARSING.get();
         }
 
         @Override

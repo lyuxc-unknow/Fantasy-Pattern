@@ -3,6 +3,7 @@ package cn.lyxc.fantasytechnology.network;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
+import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.deviceaccess.DeviceAccessCheck;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
@@ -94,6 +95,11 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
 
     public void handle(IPayloadContext context) {
         context.enqueueWork(() -> {
+            // Trusted mode accepts only a provider id plus a recipe id. In particular, never fall back to the JEI
+            // payload's client-supplied fluid, chemical, or output stacks while this mode is enabled.
+            if (FTConfig.TRUST_SERVER_RECIPE_PARSING.get()) {
+                return;
+            }
             Player player = context.player();
             if (!(player.containerMenu instanceof FantasyEncodingTermMenu menu)) {
                 return;
@@ -113,11 +119,20 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
             Set<ResourceLocation> checkedOutputs = DeviceAccessCheck.outputItemIds(outputs);
             if (recipe != null) {
                 ResourceLocation recipeTypeId = BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType());
-                if (checkedCategoryId != null && recipeTypeId != null
-                        && !checkedCategoryId.equals(recipeTypeId)) {
-                    return;
+                // A viewer category is a presentation-level id, not a RecipeType id. Mods commonly expose several
+                // JEI categories for one recipe type (or use a category id that names a specific machine), so equality
+                // here would reject valid transfers such as Extended Crafting tables and MI machines. Keep the viewer
+                // id when supplied because device-access and blocklist rules are defined in those terms; only use the
+                // server recipe type as a fallback for viewers that cannot identify their category.
+                //
+                // The trade-off is deliberate: the category is the one field of this packet the server cannot verify,
+                // so a modified client can name a category that is not on the blocklist. Everything the recipe is
+                // actually made of still comes from the server-resolved recipe below, and a pack that needs the
+                // blocklist to be authoritative should enable trust_server_recipe_parsing, which refuses this packet
+                // outright.
+                if (checkedCategoryId == null) {
+                    checkedCategoryId = recipeTypeId;
                 }
-                checkedCategoryId = recipeTypeId;
 
                 ItemStack serverResult = recipe.getResultItem(player.level().registryAccess());
                 if (!serverResult.isEmpty()) {

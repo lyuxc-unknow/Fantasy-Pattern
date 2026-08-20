@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added the `trust_server_recipe_parsing` server option, disabled by default. When enabled, JEI transfer is rejected and the encoding terminal uses a searchable server-backed recipe provider instead. Note that switching this option invalidates every fantasy pattern already encoded in the world; the pattern tooltip now says so.
+- Added a trusted crafting-table provider and a datapack DSL under `data/<namespace>/recipe_provider/*.json`, with item, fluid, optional Mekanism chemical, tag, amount, output-ignore, catalyst, and NeoForge-condition support.
+- Added public extension points for custom server recipe providers and additional AE key stack types.
+- The terminal now explains why an encode or a recipe selection did nothing - wrong authorization mode, missing devices, or a recipe that a reload removed - instead of ignoring the click.
+
+### Security
+
+- Trusted mode accepts only a provider id and recipe id from clients. Inputs, outputs, tags, amounts, and device-access decisions are resolved again from server-owned data.
+- Colliding recipe fingerprints are detected when the indexes are built and refused on both sides, rather than resolving to whichever recipe was indexed first.
+
+### Performance
+
+- The recipe browser is paged and searched on the server. Previously the whole catalogue was sent in one packet, capped at 8192 entries: large packs silently lost recipes, the packet approached the network frame limit, and the client re-sorted every entry on each keystroke.
+- Device access is judged once per catalogue page rather than once per recipe. Each check walked every device access block on the network and all of their slots, so a page cost thousands of grid sweeps.
+- Datapack recipes are resolved once per reload instead of being re-read and re-parsed from the resource manager on every lookup - which previously put a synchronous file read on the craft dispatch path.
+- Crafting-table recipes are indexed once per reload, and recently resolved trusted recipes are cached against that index, so re-resolving a pattern before a craft is a map lookup.
+- Recipe fingerprints are computed once per recipe instead of on every read.
+
+### Fixed
+
+- Rendered the server recipe provider as a modal top-level overlay so AE2 and JEI elements, overlays, and tooltips cannot cover it or intercept its input.
+- Restored client-mode JEI transfer for categories whose viewer id differs from their server recipe type, including Extended Crafting tables and Modern Industrialization machines.
+- Trusted patterns now store an opaque server recipe fingerprint and re-resolve the server recipe before planning inputs and accepting a craft; trusted and JEI-authenticated patterns are mutually disabled.
+- Trusted recipe state is dropped when the server stops, instead of keeping a closed single-player world reachable from static fields.
+
 ## 1.0.13 - 2026-08-12
 
 This release moves fast planning and batch execution onto OmniSequence's native compatibility interfaces and fixes deep recursive crafts when fuel consumption is disabled.

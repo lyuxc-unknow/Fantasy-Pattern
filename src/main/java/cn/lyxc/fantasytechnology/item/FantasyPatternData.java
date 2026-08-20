@@ -29,9 +29,10 @@ import java.util.Optional;
 /// data components when matching; {@link #outputsIgnore()} holds the parallel flags for the results (kept for display
 /// and re-editing, they carry no matching semantics).
 ///
-/// The pattern itself is the recipe - no live recipe lookup happens when it is used.
+/// Ordinary JEI/client-authenticated patterns carry their recipe directly. A trusted server-authenticated pattern also
+/// carries an opaque server recipe token; the server re-resolves that token before planning and before execution.
 public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericStack> outputs,
-        List<Boolean> outputsIgnore) {
+        List<Boolean> outputsIgnore, Optional<Long> serverRecipeToken) {
 
     /// How many ingredient entries a single pattern can hold.
     public static final int MAX_INPUTS = 81;
@@ -40,14 +41,21 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
 
     /// Compatibility constructor for data that predates the ignore-data flags (everything then defaults to false).
     public FantasyPatternData(List<PatternIngredient> inputs, List<GenericStack> outputs) {
-        this(inputs, outputs, List.of());
+        this(inputs, outputs, List.of(), Optional.empty());
+    }
+
+    public FantasyPatternData(List<PatternIngredient> inputs, List<GenericStack> outputs,
+            List<Boolean> outputsIgnore) {
+        this(inputs, outputs, outputsIgnore, Optional.empty());
     }
 
     public static final Codec<FantasyPatternData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             PatternIngredient.CODEC.listOf().fieldOf("inputs").forGetter(FantasyPatternData::inputs),
             GenericStack.CODEC.listOf().fieldOf("outputs").forGetter(FantasyPatternData::outputs),
             Codec.BOOL.listOf().optionalFieldOf("outputsIgnore", List.of())
-                    .forGetter(FantasyPatternData::outputsIgnore))
+                    .forGetter(FantasyPatternData::outputsIgnore),
+            Codec.LONG.optionalFieldOf("server_recipe_token")
+                    .forGetter(FantasyPatternData::serverRecipeToken))
             .apply(instance, FantasyPatternData::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, FantasyPatternData> STREAM_CODEC = StreamCodec.composite(
@@ -57,6 +65,8 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
             FantasyPatternData::outputs,
             ByteBufCodecs.BOOL.apply(ByteBufCodecs.list(MAX_OUTPUTS)),
             FantasyPatternData::outputsIgnore,
+            ByteBufCodecs.optional(ByteBufCodecs.VAR_LONG),
+            FantasyPatternData::serverRecipeToken,
             FantasyPatternData::new);
 
     public FantasyPatternData {
@@ -73,6 +83,7 @@ public record FantasyPatternData(List<PatternIngredient> inputs, List<GenericSta
         }
         outputs = List.copyOf(keptOutputs);
         outputsIgnore = List.copyOf(keptIgnore);
+        serverRecipeToken = serverRecipeToken == null ? Optional.empty() : serverRecipeToken;
         if (inputs.size() > MAX_INPUTS) {
             throw new IllegalArgumentException(
                     "Fantasy pattern allows at most " + MAX_INPUTS + " ingredients, got " + inputs.size());

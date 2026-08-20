@@ -13,14 +13,22 @@ import appeng.menu.slot.FakeSlot;
 import appeng.util.ConfigInventory;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.blockentity.FantasyDeviceAccessBlockEntity;
+import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.deviceaccess.DeviceAccessCheck;
 import cn.lyxc.fantasytechnology.item.FantasyBlankPatternItem;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
 import cn.lyxc.fantasytechnology.network.DeviceCatalystsPayload;
+import cn.lyxc.fantasytechnology.network.RequestServerRecipesPayload;
+import cn.lyxc.fantasytechnology.network.ServerRecipeCatalogPayload;
 import cn.lyxc.fantasytechnology.part.FantasyEncodingTerminalPart;
 import cn.lyxc.fantasytechnology.part.IFantasyEncodingTerminalHost;
+import cn.lyxc.fantasytechnology.recipeprovider.CatalogueEntry;
+import cn.lyxc.fantasytechnology.recipeprovider.ServerRecipeSummary;
+import cn.lyxc.fantasytechnology.recipeprovider.ServerRecipe;
+import cn.lyxc.fantasytechnology.recipeprovider.ServerRecipeProviders;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
@@ -36,6 +44,8 @@ import java.util.Collection;
 import java.util.Set;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.ToIntFunction;
 
 /// Menu of the fantasy encoding terminal, shaped like AE2's processing pattern mode.
 ///
@@ -74,6 +84,8 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     public long inputIgnoreHigh;
     @GuiSync(112)
     public int outputIgnoreBits;
+    @GuiSync(113)
+    public boolean trustServerRecipeParsing;
 
     /// Ceiling for {@link #doubleAmounts()}. A click that would push any single ingredient or result past this is
     /// cancelled wholesale, so all entries always stay on the same multiple of the original amounts. The ceiling
@@ -91,6 +103,11 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     /// Last seen contents of the encoded pattern slot, so a newly inserted pattern is decoded exactly once.
     private ItemStack lastEncodedPattern = ItemStack.EMPTY;
 
+    /// Set only by a server recipe-provider selection or by loading an already authenticated pattern. A normal JEI
+    /// transfer always clears it, so the encode action cannot accidentally mint a server-authenticated pattern from
+    /// client-provided stacks.
+    private Optional<Long> serverRecipeToken = Optional.empty();
+
     /// Change counter and contents of the last catalyst summary sent to the client; see {@link #syncDeviceCatalysts}.
     private long lastCatalystVersion = Long.MIN_VALUE;
     @Nullable
@@ -100,6 +117,27 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     /// rewired. One second is far below what a player can react to and costs one walk of the device blocks.
     private static final int CATALYST_SWEEP_TICKS = 20;
     private int catalystSweepCooldown;
+
+    /// Shortest interval between two catalogue builds. Typing in the browser's search box produces one request per
+    /// keystroke; they are coalesced onto this interval so a burst costs one build rather than one per character.
+    private static final int CATALOGUE_BUILD_TICKS = 2;
+
+    /// Server side: the most recent catalogue request still waiting to be answered, if any.
+    @Nullable
+    private CatalogueRequest pendingCatalogue;
+    private long lastCatalogueBuildTick = Long.MIN_VALUE;
+
+    /// Client side: the page the server last sent, and where it sits in the whole result set.
+    private List<ServerRecipeSummary> serverRecipeCatalog = List.of();
+    private boolean serverRecipeCatalogReceived;
+    private int serverRecipeCatalogRevision;
+    private int serverRecipeCatalogPage;
+    private int serverRecipeCatalogTotalPages = 1;
+    private int serverRecipeCatalogTotalMatches;
+
+    /// One queued catalogue request; see {@link #queueServerRecipeCatalog}.
+    private record CatalogueRequest(String query, int page, int pageSize) {
+    }
 
     public FantasyEncodingTermMenu(int id, Inventory playerInventory, IFantasyEncodingTerminalHost host) {
         // false: add the player inventory ourselves, after the encoding slots, like AE2's own pattern terminal does.
@@ -159,7 +197,9 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
                 loadPattern(current);
             }
             packIgnoreFlags();
+            trustServerRecipeParsing = FTConfig.TRUST_SERVER_RECIPE_PARSING.get();
             syncDeviceCatalysts();
+            serveQueuedCatalogue();
         }
         super.broadcastChanges();
     }
@@ -209,11 +249,131 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     /// four-catalyst default - so the two sides can only disagree about the contents, never about the rule.
     public boolean allowsDeviceAccess(@Nullable ResourceLocation recipeId, @Nullable ResourceLocation categoryId,
             Set<ResourceLocation> outputs, Collection<Item> catalysts) {
+        return checkDeviceAccess(recipeId, categoryId, outputs, catalysts, deviceCatalystSnapshot()).allowed();
+    }
+
+    /// What the network's device access blocks hold, taken once so a caller that judges many recipes in a row does not
+    /// walk every block and all of their slots per recipe. Null when the config waives the check entirely, which is
+    /// also why it is worth taking before the loop rather than inside {@link #checkDeviceAccess}.
+    @Nullable
+    public ToIntFunction<Item> deviceCatalystSnapshot() {
         if (DeviceAccessCheck.unrestricted()) {
-            return true;
+            return null;
         }
         var available = FantasyDeviceAccessBlockEntity.collectCatalysts(networkGrid());
-        return DeviceAccessCheck.check(recipeId, categoryId, outputs, catalysts, available::getInt).allowed();
+        return available::getInt;
+    }
+
+    public DeviceAccessCheck.Result checkDeviceAccess(@Nullable ResourceLocation recipeId,
+            @Nullable ResourceLocation categoryId, Set<ResourceLocation> outputs, Collection<Item> catalysts,
+            @Nullable ToIntFunction<Item> available) {
+        if (available == null) {
+            return DeviceAccessCheck.Result.pass();
+        }
+        return DeviceAccessCheck.check(recipeId, categoryId, outputs, catalysts, available);
+    }
+
+    /// Tells the player why an action they took in this terminal did nothing. Shown above the hotbar rather than in
+    /// chat: these are transient answers to a click, not something worth keeping in the chat log.
+    public void notifyPlayer(@Nullable Component message) {
+        if (message != null && getPlayer() instanceof ServerPlayer serverPlayer) {
+            serverPlayer.displayClientMessage(message, true);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Trusted recipe catalogue
+    // ------------------------------------------------------------------------
+
+    /// The page of the catalogue the server last sent. Client side.
+    public List<ServerRecipeSummary> getServerRecipeCatalog() {
+        return serverRecipeCatalog;
+    }
+
+    public boolean isServerRecipeCatalogReceived() {
+        return serverRecipeCatalogReceived;
+    }
+
+    public int getServerRecipeCatalogRevision() {
+        return serverRecipeCatalogRevision;
+    }
+
+    public int getServerRecipeCatalogPage() {
+        return serverRecipeCatalogPage;
+    }
+
+    public int getServerRecipeCatalogTotalPages() {
+        return serverRecipeCatalogTotalPages;
+    }
+
+    public int getServerRecipeCatalogTotalMatches() {
+        return serverRecipeCatalogTotalMatches;
+    }
+
+    public void beginServerRecipeCatalogRequest() {
+        serverRecipeCatalogReceived = false;
+    }
+
+    public void setServerRecipeCatalog(List<ServerRecipeSummary> recipes, int page, int totalPages,
+            int totalMatches) {
+        serverRecipeCatalog = List.copyOf(recipes);
+        serverRecipeCatalogReceived = true;
+        serverRecipeCatalogPage = page;
+        serverRecipeCatalogTotalPages = Math.max(1, totalPages);
+        serverRecipeCatalogTotalMatches = totalMatches;
+        serverRecipeCatalogRevision++;
+    }
+
+    /// Records a catalogue request to be answered on the next allowed tick.
+    ///
+    /// Only the newest request is kept: while a player is typing, every earlier query is already stale by the time the
+    /// interval elapses, so serving them would be work whose result is thrown away. Nothing is dropped from the
+    /// player's point of view - the last thing they asked for is always the thing that gets built.
+    public void queueServerRecipeCatalog(String query, int page, int pageSize) {
+        pendingCatalogue = new CatalogueRequest(query, page, pageSize);
+    }
+
+    /// Builds and sends the queued catalogue page, at most once every {@link #CATALOGUE_BUILD_TICKS} ticks.
+    private void serveQueuedCatalogue() {
+        CatalogueRequest request = pendingCatalogue;
+        if (request == null || !(getPlayer() instanceof ServerPlayer serverPlayer)) {
+            return;
+        }
+        long now = serverPlayer.level().getGameTime();
+        if (lastCatalogueBuildTick != Long.MIN_VALUE && now - lastCatalogueBuildTick < CATALOGUE_BUILD_TICKS) {
+            return;
+        }
+        lastCatalogueBuildTick = now;
+        pendingCatalogue = null;
+
+        if (!FTConfig.TRUST_SERVER_RECIPE_PARSING.get()) {
+            PacketDistributor.sendToPlayer(serverPlayer, new ServerRecipeCatalogPayload(List.of(), 0, 1, 0));
+            return;
+        }
+
+        List<CatalogueEntry> matches = ServerRecipeProviders.search(serverPlayer, request.query());
+        int pageSize = Math.max(1, Math.min(request.pageSize(), RequestServerRecipesPayload.MAX_PAGE_SIZE));
+        int totalPages = Math.max(1, (matches.size() + pageSize - 1) / pageSize);
+        int page = Math.max(0, Math.min(request.page(), totalPages - 1));
+
+        // One snapshot for the whole page; see deviceCatalystSnapshot.
+        ToIntFunction<Item> available = deviceCatalystSnapshot();
+        int end = Math.min(matches.size(), (page + 1) * pageSize);
+        List<ServerRecipeSummary> summaries = new ArrayList<>(Math.max(0, end - page * pageSize));
+        for (int i = page * pageSize; i < end; i++) {
+            CatalogueEntry entry = matches.get(i);
+            ServerRecipe recipe = ServerRecipeProviders
+                    .find(serverPlayer, entry.providerId(), entry.recipeId()).orElse(null);
+            if (recipe == null) {
+                continue;
+            }
+            DeviceAccessCheck.Result access = checkDeviceAccess(recipe.recipeId(), recipe.categoryId(),
+                    DeviceAccessCheck.outputItemIds(recipe.outputs()), recipe.catalysts(), available);
+            summaries.add(new ServerRecipeSummary(recipe.providerId(), recipe.recipeId(), recipe.displayStack(),
+                    access.allowed(), Optional.ofNullable(access.reason())));
+        }
+        PacketDistributor.sendToPlayer(serverPlayer,
+                new ServerRecipeCatalogPayload(summaries, page, totalPages, matches.size()));
     }
 
     /// Copies the part's ignore-data flags into the synchronised bitset. Server side only; the client reads the
@@ -330,7 +490,16 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             return;
         }
 
-        ItemStack encoded = FantasyPatternItem.encode(inputs, outputs, outputsIgnore);
+        boolean trusted = FTConfig.TRUST_SERVER_RECIPE_PARSING.get();
+        if (serverRecipeToken.isPresent() != trusted) {
+            // The two pattern authorization modes are mutually exclusive. In trusted mode only a selected server
+            // recipe can be encoded; in ordinary mode only JEI/client-authenticated patterns can be written.
+            notifyPlayer(Component.translatable(trusted
+                    ? "gui.fantasy_technology.encode_needs_server_recipe"
+                    : "gui.fantasy_technology.encode_server_recipe_disabled"));
+            return;
+        }
+        ItemStack encoded = FantasyPatternItem.encode(inputs, outputs, outputsIgnore, serverRecipeToken);
 
         ItemStack existing = encodedPatternSlot.getItem().copy();
         if (existing.isEmpty()) {
@@ -363,9 +532,11 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             return;
         }
         if (entry >= 0 && entry < inputSlots.length) {
+            serverRecipeToken = Optional.empty();
             terminalHost.setInputIgnore(entry, !terminalHost.getInputIgnore(entry));
         } else if (entry >= inputSlots.length && entry < inputSlots.length + outputSlots.length) {
             int output = entry - inputSlots.length;
+            serverRecipeToken = Optional.empty();
             terminalHost.setOutputIgnore(output, !terminalHost.getOutputIgnore(output));
         }
     }
@@ -376,6 +547,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             sendClientAction(ACTION_CLEAR);
             return;
         }
+        serverRecipeToken = Optional.empty();
         for (int i = 0; i < inputSlots.length; i++) {
             encodedInputs.setStack(i, null);
             terminalHost.setInputTag(i, null);
@@ -394,6 +566,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             sendClientAction(ACTION_DOUBLE);
             return;
         }
+        serverRecipeToken = Optional.empty();
         // All-or-nothing: if doubling any single entry would exceed the ceiling, the whole doubling is cancelled
         // so entries never end up with inconsistent multiples.
         if (wouldOverflow()) {
@@ -440,6 +613,20 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     /// than the particular one the recipe viewer happened to display.
     public void setEncodedRecipe(List<PatternIngredient> inputs, List<GenericStack> outputs,
             List<Boolean> outputsIgnore) {
+        serverRecipeToken = Optional.empty();
+        setEncodedRecipeContents(inputs, outputs, outputsIgnore);
+    }
+
+    /// Fills the terminal from trusted server-owned data and records the opaque recipe token for the subsequent
+    /// encode action. The token is never accepted from a client packet; {@link SelectServerRecipePayload} calls this
+    /// only after resolving the provider on the logical server.
+    public void setTrustedServerRecipe(ServerRecipe recipe) {
+        setEncodedRecipeContents(recipe.inputs(), recipe.outputs(), recipe.outputsIgnore());
+        serverRecipeToken = Optional.of(recipe.token());
+    }
+
+    private void setEncodedRecipeContents(List<PatternIngredient> inputs, List<GenericStack> outputs,
+            List<Boolean> outputsIgnore) {
         for (int i = 0; i < inputSlots.length; i++) {
             PatternIngredient ingredient = i < inputs.size() ? inputs.get(i) : null;
             if (ingredient == null || ingredient.isEmpty()) {
@@ -469,7 +656,23 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         if (data == null) {
             return;
         }
-        setEncodedRecipe(data.inputs(), data.outputs(), data.outputsIgnore());
+        serverRecipeToken = Optional.empty();
+        if (data.serverRecipeToken().isPresent() && !isClientSide()
+                && getPlayer() instanceof ServerPlayer serverPlayer) {
+            ServerRecipe recipe = ServerRecipeProviders.findByToken(serverPlayer.level(),
+                    data.serverRecipeToken().orElseThrow()).orElse(null);
+            if (recipe != null) {
+                setEncodedRecipeContents(recipe.inputs(), recipe.outputs(), recipe.outputsIgnore());
+                serverRecipeToken = Optional.of(recipe.token());
+                return;
+            }
+            // Keep the stale display visible for diagnosis, but do not allow it to be encoded again.
+            setEncodedRecipeContents(data.inputs(), data.outputs(), data.outputsIgnore());
+            notifyPlayer(Component.translatable("gui.fantasy_technology.server_recipe_stale"));
+            return;
+        }
+        setEncodedRecipeContents(data.inputs(), data.outputs(), data.outputsIgnore());
+        serverRecipeToken = data.serverRecipeToken();
     }
 
     /// The ingredients as encoded, each carrying the tag its slot was filled from (if it is still valid) and the
@@ -544,7 +747,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
     /// Holds the encoded recombination pattern. Encoded patterns may also be placed here by hand, which loads their
     /// contents back into the terminal so the recipe can be edited and written back.
-    private static class EncodedPatternSlot extends AppEngSlot {
+    private class EncodedPatternSlot extends AppEngSlot {
 
         EncodedPatternSlot(InternalInventory inv) {
             super(inv, FantasyEncodingTerminalPart.ENCODED_PATTERN_SLOT);
@@ -552,7 +755,9 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
 
         @Override
         public boolean mayPlace(ItemStack stack) {
-            return FantasyPatternItem.isEncoded(stack) && super.mayPlace(stack);
+            FantasyPatternData data = FantasyPatternItem.getData(stack);
+            return data != null && data.serverRecipeToken().isPresent() == trustServerRecipeParsing
+                    && super.mayPlace(stack);
         }
 
         @Override

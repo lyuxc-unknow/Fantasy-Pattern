@@ -12,6 +12,9 @@ import cn.lyxc.fantasytechnology.deviceaccess.DeviceRequirements;
 import cn.lyxc.fantasytechnology.network.DeviceRequirementSync;
 import cn.lyxc.fantasytechnology.network.FTPackets;
 import cn.lyxc.fantasytechnology.part.FantasyEncodingTerminalPart;
+import cn.lyxc.fantasytechnology.recipeprovider.DatapackRecipeProviderLoader;
+import cn.lyxc.fantasytechnology.recipeprovider.RecipeStackDefinition;
+import cn.lyxc.fantasytechnology.recipeprovider.ServerRecipeProviders;
 import cn.lyxc.fantasytechnology.registry.*;
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
@@ -24,6 +27,7 @@ import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.slf4j.Logger;
 
@@ -60,10 +64,18 @@ public class FantasyTechnology {
         // players right after.
         NeoForge.EVENT_BUS.addListener(this::addReloadListeners);
         NeoForge.EVENT_BUS.addListener(this::syncDeviceRequirements);
+        NeoForge.EVENT_BUS.addListener(this::clearServerState);
     }
 
     private void addReloadListeners(AddReloadListenerEvent event) {
         event.addListener(new DeviceRequirementLoader(event.getRegistryAccess(), event.getConditionContext()));
+        event.addListener(new DatapackRecipeProviderLoader(event.getRegistryAccess(), event.getConditionContext()));
+    }
+
+    /// The trusted recipe indexes are static, and they hold the resolved datapack recipes and the recipe manager they
+    /// were built from. Without this they would keep a closed single-player world reachable until the next one loads.
+    private void clearServerState(ServerStoppedEvent event) {
+        ServerRecipeProviders.clearServerState();
     }
 
     /// Fires on login and after every {@code /reload}, for every affected player - which is exactly when a client's
@@ -98,6 +110,7 @@ public class FantasyTechnology {
                     FTBlocks.FANTASY_DEVICE_ACCESS.asItem());
             // Lets crafting CPUs decode fantasy patterns (required for job persistence across reloads).
             PatternDetailsHelper.registerDecoder(FantasyPatternDecoder.INSTANCE);
+            RecipeStackDefinition.registerOptionalResolvers();
         });
     }
 }

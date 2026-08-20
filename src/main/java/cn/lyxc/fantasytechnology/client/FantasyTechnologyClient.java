@@ -1,12 +1,14 @@
 package cn.lyxc.fantasytechnology.client;
 
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -32,6 +34,13 @@ public class FantasyTechnologyClient {
         modEventBus.addListener(this::registerScreens);
         modEventBus.addListener(this::registerRenderers);
         NeoForge.EVENT_BUS.addListener(this::captureBlockedJeiCategories);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, this::renderRecipeProviderOverlay);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, this::handleRecipeProviderMousePressed);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, this::handleRecipeProviderMouseReleased);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, this::handleRecipeProviderMouseDragged);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, this::handleRecipeProviderMouseScrolled);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, this::handleRecipeProviderKeyPressed);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, this::handleRecipeProviderCharacterTyped);
         modContainer.registerExtensionPoint(IConfigScreenFactory.class,
                 (container, parent) -> new FantasyConfigScreen(parent));
     }
@@ -61,5 +70,56 @@ public class FantasyTechnologyClient {
     /// leaves and joins again.
     private void captureBlockedJeiCategories(ClientPlayerNetworkEvent.LoggingIn event) {
         FantasyEncodingTransferHandler.captureBlockedCategoryIds();
+    }
+
+    private void renderRecipeProviderOverlay(ScreenEvent.Render.Post event) {
+        if (event.getScreen() instanceof FantasyEncodingTermScreen screen) {
+            screen.renderRecipeProviderOverlay(event.getGuiGraphics(), event.getMouseX(), event.getMouseY(),
+                    event.getPartialTick());
+        }
+    }
+
+    private void handleRecipeProviderMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
+        if (event.getScreen() instanceof FantasyEncodingTermScreen screen && screen.isRecipeProviderOpen()) {
+            screen.mouseClicked(event.getMouseX(), event.getMouseY(), event.getButton());
+            event.setCanceled(true);
+        }
+    }
+
+    private void handleRecipeProviderMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
+        if (event.getScreen() instanceof FantasyEncodingTermScreen screen && screen.isRecipeProviderOpen()) {
+            screen.mouseReleased(event.getMouseX(), event.getMouseY(), event.getButton());
+            event.setCanceled(true);
+        }
+    }
+
+    private void handleRecipeProviderMouseDragged(ScreenEvent.MouseDragged.Pre event) {
+        if (event.getScreen() instanceof FantasyEncodingTermScreen screen && screen.isRecipeProviderOpen()) {
+            screen.mouseDragged(event.getMouseX(), event.getMouseY(), event.getMouseButton(),
+                    event.getDragX(), event.getDragY());
+            event.setCanceled(true);
+        }
+    }
+
+    private void handleRecipeProviderMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
+        if (event.getScreen() instanceof FantasyEncodingTermScreen screen && screen.isRecipeProviderOpen()) {
+            screen.mouseScrolled(event.getMouseX(), event.getMouseY(), event.getScrollDeltaX(),
+                    event.getScrollDeltaY());
+            event.setCanceled(true);
+        }
+    }
+
+    private void handleRecipeProviderKeyPressed(ScreenEvent.KeyPressed.Pre event) {
+        if (event.getScreen() instanceof FantasyEncodingTermScreen screen && screen.isRecipeProviderOpen()) {
+            screen.keyPressed(event.getKeyCode(), event.getScanCode(), event.getModifiers());
+            event.setCanceled(true);
+        }
+    }
+
+    private void handleRecipeProviderCharacterTyped(ScreenEvent.CharacterTyped.Pre event) {
+        if (event.getScreen() instanceof FantasyEncodingTermScreen screen && screen.isRecipeProviderOpen()) {
+            screen.charTyped(event.getCodePoint(), event.getModifiers());
+            event.setCanceled(true);
+        }
     }
 }

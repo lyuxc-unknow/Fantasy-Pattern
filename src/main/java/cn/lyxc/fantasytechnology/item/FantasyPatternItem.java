@@ -5,6 +5,7 @@ import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
 import appeng.items.misc.WrappedGenericStack;
 import appeng.util.InteractionUtil;
+import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.registry.FTComponents;
 import cn.lyxc.fantasytechnology.registry.FTItems;
 import net.minecraft.ChatFormatting;
@@ -24,6 +25,7 @@ import org.jetbrains.annotations.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.WeakHashMap;
 
 
@@ -123,8 +125,16 @@ public class FantasyPatternItem extends Item {
     /// Creates an encoded fantasy pattern, including the per-result ignore-data flags.
     public static ItemStack encode(List<PatternIngredient> inputs, List<GenericStack> outputs,
             List<Boolean> outputsIgnore) {
+        return encode(inputs, outputs, outputsIgnore, Optional.empty());
+    }
+
+    /// Creates an encoded pattern authenticated by a server recipe token. The token is omitted for JEI/client-auth
+    /// patterns; only a server-side terminal action can supply a non-empty value.
+    public static ItemStack encode(List<PatternIngredient> inputs, List<GenericStack> outputs,
+            List<Boolean> outputsIgnore, Optional<Long> serverRecipeToken) {
         ItemStack pattern = new ItemStack(FTItems.FANTASY_PATTERN.get());
-        pattern.set(FTComponents.FANTASY_PATTERN_DATA, new FantasyPatternData(inputs, outputs, outputsIgnore));
+        pattern.set(FTComponents.FANTASY_PATTERN_DATA,
+                new FantasyPatternData(inputs, outputs, outputsIgnore, serverRecipeToken));
         return pattern;
     }
 
@@ -138,6 +148,16 @@ public class FantasyPatternItem extends Item {
             tooltip.add(Component.translatable("item.fantasy_technology.fantasy_pattern.invalid")
                     .withStyle(ChatFormatting.RED));
             return;
+        }
+
+        // A pattern is only valid in the authorization mode it was written in, and flipping that config leaves working
+        // patterns in place that silently stop crafting. Say so here rather than letting the player guess.
+        if (FTConfig.SPEC.isLoaded()
+                && data.serverRecipeToken().isPresent() != FTConfig.TRUST_SERVER_RECIPE_PARSING.get()) {
+            tooltip.add(Component.translatable(data.serverRecipeToken().isPresent()
+                    ? "item.fantasy_technology.fantasy_pattern.needs_trusted_mode"
+                    : "item.fantasy_technology.fantasy_pattern.needs_client_mode")
+                    .withStyle(ChatFormatting.RED));
         }
 
         tooltip.add(Component.translatable("item.fantasy_technology.fantasy_pattern.outputs")

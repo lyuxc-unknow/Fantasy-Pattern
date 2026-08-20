@@ -82,6 +82,10 @@
     "encodePattern": {
       "left": 147,
       "bottom": 145
+    },
+    "recipeProvider": {
+      "left": 169,
+      "bottom": 145
     }
   }
 }

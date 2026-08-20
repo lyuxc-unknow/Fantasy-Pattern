@@ -6,6 +6,9 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
+import cn.lyxc.fantasytechnology.config.FTConfig;
+import cn.lyxc.fantasytechnology.recipeprovider.ServerRecipe;
+import cn.lyxc.fantasytechnology.recipeprovider.ServerRecipeProviders;
 import cn.lyxc.fantasytechnology.registry.FTComponents;
 import com.ae2vm.addon.crafting.DeterministicWearInput;
 import com.ae2vm.addon.crafting.DurableInputAdapters;
@@ -97,6 +100,27 @@ public class FantasyCraftingPattern implements IPatternDetails {
         FantasyPatternData data = what.get(FTComponents.FANTASY_PATTERN_DATA.get());
         if (data == null || !data.isCraftable()) {
             return null;
+        }
+
+        boolean serverAuthenticated = data.serverRecipeToken().isPresent();
+        // The two authorization modes are intentionally disjoint. A server-authenticated pattern is only valid while
+        // trusted parsing is enabled, and a JEI/client-authenticated pattern is only valid in the ordinary mode.
+        // Checking on the logical server is authoritative; the client may still decode the stored display data for a
+        // tooltip while it waits for the server's menu/config state.
+        if (!level.isClientSide() && serverAuthenticated != FTConfig.TRUST_SERVER_RECIPE_PARSING.get()) {
+            return null;
+        }
+
+        if (serverAuthenticated && !level.isClientSide()) {
+            ServerRecipe recipe = ServerRecipeProviders.findByToken(level, data.serverRecipeToken().orElseThrow())
+                    .orElse(null);
+            if (recipe == null || recipe.token() != data.serverRecipeToken().orElseThrow()) {
+                return null;
+            }
+            // Inputs and outputs are deliberately replaced by the current server recipe. The component's copied
+            // stacks are display data only; planning and item requests must use the server's current definition.
+            data = new FantasyPatternData(recipe.inputs(), recipe.outputs(), recipe.outputsIgnore(),
+                    data.serverRecipeToken());
         }
         return new FantasyCraftingPattern(what, data);
     }

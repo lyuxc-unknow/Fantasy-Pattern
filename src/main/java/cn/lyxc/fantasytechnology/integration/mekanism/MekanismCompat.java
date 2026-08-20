@@ -68,6 +68,21 @@ public final class MekanismCompat {
         return key == null ? null : new GenericStack(key, stack.getAmount());
     }
 
+    /// Resolves a chemical id for the trusted recipe-provider datapack DSL. Returns null when either bridge mod is
+    /// absent, the id is unknown, or it names Mekanism's empty chemical.
+    @Nullable
+    public static AEKey chemicalKey(ResourceLocation id) {
+        if (!isPresent()) {
+            return null;
+        }
+        Holder<Chemical> chemical = MekanismAPI.CHEMICAL_REGISTRY.getHolder(id).orElse(null);
+        if (chemical == null) {
+            return null;
+        }
+        ChemicalStack stack = new ChemicalStack(chemical, 1);
+        return stack.isEmpty() ? null : MekanismKey.of(stack);
+    }
+
     /// Every chemical in the tag, as AE2 keys; empty when the representative is not a chemical or the bridging mods
     /// are absent.
     ///
