@@ -11,11 +11,14 @@ import java.util.Set;
 public final class FantasyTechnologyMixinPlugin implements IMixinConfigPlugin {
 
     private static final String OMNI_MOD_ID = "molecularmanipulator";
+    private static final String ENHANCEMENTS_MOD_ID = "appliedenhancements";
+    private static final String ENHANCEMENTS_MIXIN =
+            "cn.lyxc.fantasytechnology.mixin.AelisPlannerMixin";
     private static final Set<String> OMNI_MIXINS = Set.of(
             "cn.lyxc.fantasytechnology.mixin.MolecularBatchCraftingProviderMixin",
-            "cn.lyxc.fantasytechnology.mixin.OmniBatchDispatchMixin",
-            "cn.lyxc.fantasytechnology.mixin.OmniMaxFastPlannerMixin");
+            "cn.lyxc.fantasytechnology.mixin.OmniBatchDispatchMixin");
     private static Boolean omniPresent;
+    private static Boolean enhancementsPresent;
 
     private static boolean isOmniPresent() {
         if (omniPresent == null) {
@@ -28,8 +31,22 @@ public final class FantasyTechnologyMixinPlugin implements IMixinConfigPlugin {
         return omniPresent;
     }
 
+    private static boolean isEnhancementsPresent() {
+        if (enhancementsPresent == null) {
+            try {
+                enhancementsPresent = LoadingModList.get().getModFileById(ENHANCEMENTS_MOD_ID) != null;
+            } catch (LinkageError | RuntimeException ignored) {
+                enhancementsPresent = false;
+            }
+        }
+        return enhancementsPresent;
+    }
+
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (ENHANCEMENTS_MIXIN.equals(mixinClassName)) {
+            return isEnhancementsPresent();
+        }
         return !OMNI_MIXINS.contains(mixinClassName) || isOmniPresent();
     }
 

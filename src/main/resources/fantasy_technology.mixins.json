@@ -10,7 +10,7 @@
   "mixins": [
     "MolecularBatchCraftingProviderMixin",
     "OmniBatchDispatchMixin",
-    "OmniMaxFastPlannerMixin",
+    "AelisPlannerMixin",
     "PatternProviderLogicMixin"
   ],
   "injectors": {
