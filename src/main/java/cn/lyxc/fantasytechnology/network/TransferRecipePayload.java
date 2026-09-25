@@ -73,9 +73,9 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
                     TransferRecipePayload::recipeId,
                     ByteBufCodecs.optional(ResourceLocation.STREAM_CODEC.cast()),
                     TransferRecipePayload::categoryId,
-                    GenericStack.STREAM_CODEC.apply(ByteBufCodecs.list(FantasyPatternData.MAX_INPUTS)),
+                    GenericStack.STREAM_CODEC.apply(ByteBufCodecs.list(FantasyPatternData.MAX_INPUTS + 1)),
                     TransferRecipePayload::inputs,
-                    GenericStack.STREAM_CODEC.apply(ByteBufCodecs.list(FantasyPatternData.MAX_OUTPUTS)),
+                    GenericStack.STREAM_CODEC.apply(ByteBufCodecs.list(FantasyPatternData.MAX_OUTPUTS + 1)),
                     TransferRecipePayload::outputs,
                     ByteBufCodecs.registry(Registries.ITEM)
                             .apply(ByteBufCodecs.list(MAX_CATALYSTS)),
@@ -102,6 +102,9 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
             }
             Player player = context.player();
             if (!(player.containerMenu instanceof FantasyEncodingTermMenu menu)) {
+                return;
+            }
+            if (inputs.size() > FantasyPatternData.MAX_INPUTS || outputs.size() > FantasyPatternData.MAX_OUTPUTS) {
                 return;
             }
 
@@ -152,19 +155,24 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
                 return;
             }
 
-            // Merging happens before the cap, so a recipe with more slots than a pattern can hold still contributes
-            // its full amount to the entry it collapses into. Durable tools (axes, hoes, ...) then have their
+            // Merge equivalent ingredients without discarding any amounts. Durable tools (axes, hoes, ...) have their
             // ignore-data flag set automatically, so "repair/upgrade an axe" recipes accept any damage state instead
             // of the exact one the recipe viewer happened to display.
             List<PatternIngredient> ingredients = mergeIngredients(buildIngredients(recipe, inputs)).stream()
                     .map(TransferRecipePayload::ignoreDamageForTools)
-                    .limit(FantasyPatternData.MAX_INPUTS)
                     .toList();
+
+            if (ingredients.size() > FantasyPatternData.MAX_INPUTS) {
+                return;
+            }
 
             List<GenericStack> results = outputs.stream()
                     .filter(stack -> stack != null && stack.amount() > 0)
-                    .limit(FantasyPatternData.MAX_OUTPUTS)
                     .toList();
+
+            if (results.size() > FantasyPatternData.MAX_OUTPUTS) {
+                return;
+            }
 
             if (!ingredients.isEmpty() && !results.isEmpty()) {
                 menu.setEncodedRecipe(ingredients, results);
@@ -175,8 +183,7 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
     /// Collapses ingredients of the same kind - the same tag, or the same exact key - into a single entry whose
     /// amount is the sum, so a bookshelf transfer shows one {@code 6x #minecraft:planks} and one {@code 3x book}
     /// instead of nine separate slots. The first ingredient of each kind keeps its representative and tag; order
-    /// follows first appearance. Runs before the list is capped, so nothing is lost off the end that would have
-    /// merged into an entry that is kept.
+    /// follows first appearance. An oversized list is rejected by the caller, never truncated here.
     private static List<PatternIngredient> mergeIngredients(List<PatternIngredient> ingredients) {
         Map<FantasyPatternData.IngredientKey, PatternIngredient> merged = new LinkedHashMap<>();
         for (PatternIngredient ingredient : ingredients) {
@@ -351,7 +358,7 @@ public record TransferRecipePayload(Optional<ResourceLocation> recipeId, Optiona
     }
 
     /// Ingredients taken straight from what the viewer displayed, with no tags. Used only when the recipe reports no
-    /// ingredients at all. Not capped here: the caller merges first and caps afterwards.
+    /// ingredients at all. The caller merges entries and rejects any list that still exceeds the slot limit.
     private static List<PatternIngredient> displayedIngredients(List<GenericStack> stacks) {
         List<PatternIngredient> ingredients = new ArrayList<>();
         for (GenericStack stack : stacks) {

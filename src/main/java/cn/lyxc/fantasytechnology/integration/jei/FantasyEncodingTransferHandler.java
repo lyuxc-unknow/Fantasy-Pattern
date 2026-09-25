@@ -87,12 +87,16 @@ public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferH
         Optional<ResourceLocation> categoryId = Optional.ofNullable(categoryUid);
         List<Item> catalysts = category == null ? List.of() : category.catalysts();
 
-        List<GenericStack> inputs = read(recipeSlots, RecipeIngredientRole.INPUT, FantasyPatternData.MAX_INPUTS);
-        List<GenericStack> outputs = read(recipeSlots, RecipeIngredientRole.OUTPUT, FantasyPatternData.MAX_OUTPUTS);
+        // Read one entry beyond the pattern capacity so an oversized transfer is rejected instead of being silently
+        // truncated by the client-side reader.
+        List<GenericStack> inputs = read(recipeSlots, RecipeIngredientRole.INPUT, FantasyPatternData.MAX_INPUTS + 1);
+        List<GenericStack> outputs = read(recipeSlots, RecipeIngredientRole.OUTPUT, FantasyPatternData.MAX_OUTPUTS + 1);
 
         // A pattern needs something to consume and something to produce. Results only ever come from the display, so
         // without them there is nothing to encode no matter what the server could resolve.
-        if (outputs.isEmpty() || (recipeId.isEmpty() && inputs.isEmpty())) {
+        if (outputs.isEmpty() || inputs.size() > FantasyPatternData.MAX_INPUTS
+                || outputs.size() > FantasyPatternData.MAX_OUTPUTS
+                || (recipeId.isEmpty() && inputs.isEmpty())) {
             return helper.createUserErrorWithTooltip(
                     Component.translatable("gui.fantasy_technology.transfer_unsupported"));
         }

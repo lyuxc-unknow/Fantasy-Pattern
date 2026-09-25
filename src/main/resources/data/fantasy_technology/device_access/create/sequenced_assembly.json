@@ -1,0 +1,16 @@
+{
+  "neoforge:conditions": [
+    { "type": "neoforge:mod_loaded", "modid": "create" }
+  ],
+  "categories": ["create:sequenced_assembly"],
+  "devices": [
+    {
+      "count": 1,
+      "matches": [
+        { "item": "create:deployer" },
+        { "item": "create:mechanical_press" },
+        { "item": "create:spout" }
+      ]
+    }
+  ]
+}

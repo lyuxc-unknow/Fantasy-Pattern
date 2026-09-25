@@ -52,7 +52,8 @@ import java.util.function.ToIntFunction;
 /// Built on AE2's {@link MEStorageMenu}, so it carries the full ME network item list on top of the encoding area.
 ///
 /// The ingredient and result slots alike are preview-only: they are filled by transferring a recipe and changed
-/// through the terminal's own buttons, never by hand. For the ingredients that is a hard requirement, since an
+/// through the terminal's own actions, never by inserting items. Individual results can be cancelled with an empty
+/// cursor, provided at least one result remains. For the ingredients the restriction is a hard requirement, since an
 /// ingredient may carry a tag that a slot has no way to represent and editing it by hand would silently drop that
 /// tag.
 ///
@@ -71,6 +72,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     private static final String ACTION_CLEAR = "clear";
     private static final String ACTION_DOUBLE = "double";
     private static final String ACTION_TOGGLE_IGNORE = "toggleIgnore";
+    private static final String ACTION_REMOVE_OUTPUT = "removeOutput";
 
     /// The ignore-data flags, packed into a bitset that AE2's menu synchronisation carries to the client.
     ///
@@ -171,6 +173,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         registerClientAction(ACTION_CLEAR, this::clear);
         registerClientAction(ACTION_DOUBLE, this::doubleAmounts);
         registerClientAction(ACTION_TOGGLE_IGNORE, Integer.class, this::toggleIgnore);
+        registerClientAction(ACTION_REMOVE_OUTPUT, Integer.class, this::removeOutput);
     }
 
     public IFantasyEncodingTerminalHost getTerminalHost() {
@@ -541,6 +544,32 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         }
     }
 
+    /// Removes a result without allowing manual insertion or removal of the last valid result.
+    /// Trusted recipes must keep their server-owned outputs, which are restored when the pattern is decoded.
+    public void removeOutput(int output) {
+        if (isClientSide()) {
+            sendClientAction(ACTION_REMOVE_OUTPUT, output);
+            return;
+        }
+        if (FTConfig.TRUST_SERVER_RECIPE_PARSING.get() || !getCarried().isEmpty()
+                || output < 0 || output >= outputSlots.length) {
+            return;
+        }
+        GenericStack selected = encodedOutputs.getStack(output);
+        if (selected == null || selected.amount() <= 0) {
+            return;
+        }
+        for (int i = 0; i < outputSlots.length; i++) {
+            GenericStack remaining = encodedOutputs.getStack(i);
+            if (i != output && remaining != null && remaining.amount() > 0) {
+                serverRecipeToken = Optional.empty();
+                encodedOutputs.setStack(output, null);
+                terminalHost.setOutputIgnore(output, false);
+                return;
+            }
+        }
+    }
+
     /// Clears the ingredients and results. Safe to call from either side.
     public void clear() {
         if (isClientSide()) {
@@ -696,7 +725,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     // Slots
     // ------------------------------------------------------------------------
 
-    /// Its contents are filled by transferring a recipe and changed through the terminal's buttons, never by hand.
+    /// Its contents are filled by transferring a recipe and changed through explicit terminal actions.
     /// For the ingredients that is a hard requirement: they carry a tag the slot itself cannot represent, so letting
     /// the player edit them would silently drop it.
     ///

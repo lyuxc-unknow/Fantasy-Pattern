@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "G": {
+      "item": "ae2:quartz_glass"
+    },
+    "P": {
+      "item": "ae2:engineering_processor"
+    },
+    "C": {
+      "item": "minecraft:chest"
+    },
+    "I": {
+      "item": "ae2:interface"
+    }
+  },
+  "pattern": [
+    "GPG",
+    "CIC",
+    "GPG"
+  ],
+  "result": {
+    "count": 1,
+    "id": "fantasy_technology:fantasy_device_access"
+  }
+}

@@ -216,6 +216,15 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
             }
             return true;
         }
+        if (button == 0 && menu.getCarried().isEmpty()) {
+            for (int i = 0; i < menu.getOutputSlots().length; i++) {
+                FakeSlot slot = menu.getOutputSlots()[i];
+                if (slot.isActive() && isHovering(slot.x, slot.y, 16, 16, x, y)) {
+                    menu.removeOutput(i);
+                    return true;
+                }
+            }
+        }
         if (button == 1) {
             for (int i = 0; i < menu.getInputSlots().length; i++) {
                 FakeSlot slot = menu.getInputSlots()[i];
@@ -321,6 +330,9 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
         for (int i = 0; i < menu.getOutputSlots().length; i++) {
             if (menu.getOutputSlots()[i] == slot) {
                 tooltip.add(ignoreStatusLine(menu.isOutputIgnored(i)));
+                if (!menu.trustServerRecipeParsing) {
+                    tooltip.add(Component.translatable("gui.fantasy_technology.remove_output"));
+                }
                 return;
             }
         }

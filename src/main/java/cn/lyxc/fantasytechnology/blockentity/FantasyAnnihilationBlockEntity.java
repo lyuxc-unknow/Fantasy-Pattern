@@ -32,6 +32,7 @@ import cn.lyxc.fantasytechnology.registry.FTBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -39,6 +40,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
@@ -74,6 +76,10 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     /// They cannot be inserted inside {@code pushPattern}: the crafting CPU starts waiting for a pattern's output only
     /// after that call returns.
     private final KeyCounter pendingOutputs = new KeyCounter();
+
+    /// Mining queries loot after onRemove, while explosions may query it before. Keep suppressing the ordinary
+    /// block drop after handing out the recovery block so neither order duplicates the block itself.
+    private boolean pendingOutputDropCreated;
 
     /** Prepaid craft charges, including credits migrated from the unfinished instant-fuel implementation. */
     private long matterBallCharges;
@@ -403,6 +409,28 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         // The queued state may already have been persisted. Mark its removal/reduction so a later reload cannot
         // restore outputs that were successfully delivered to storage.
         saveChanges();
+    }
+
+    public boolean hasPendingOutputDrop() {
+        return pendingOutputDropCreated || !pendingOutputs.isEmpty();
+    }
+
+    /// Carries the queue on the block item rather than materializing it as world drops: AE2 voids fluid drops and
+    /// caps large item drops. Vanilla BlockItem restores BLOCK_ENTITY_DATA through loadTag when placed again;
+    /// onReady then wakes delivery. Inventories are dropped separately and must not be copied into this item.
+    public ItemStack takePendingOutputDrop() {
+        if (level == null || level.isClientSide() || pendingOutputDropCreated || pendingOutputs.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        CompoundTag data = new CompoundTag();
+        data.putString("id", BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(getType()).toString());
+        writeCounter(data, "pendingOutputs", pendingOutputs, level.registryAccess());
+        ItemStack drop = new ItemStack(FTBlocks.FANTASY_ANNIHILATION.get());
+        drop.set(DataComponents.BLOCK_ENTITY_DATA, CustomData.of(data));
+        drop.set(DataComponents.MAX_STACK_SIZE, 1);
+        pendingOutputDropCreated = true;
+        pendingOutputs.reset();
+        return drop;
     }
 
     // ------------------------------------------------------------------------

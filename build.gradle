@@ -158,6 +158,7 @@ dependencies {
     implementation(jarJar("com.ae2vm.addon:ae2vm:1.10.8+modified"))
 
     // Compatibility verification
+    localRuntime "maven.modrinth:create:${create_version}"
     localRuntime "maven.modrinth:modern-industrialization:2.5.5"
     localRuntime "curse.maven:alltheleaks-1091339:8553655"
     localRuntime "maven.modrinth:mekanism_extra:1.21.1-1.4.0"
