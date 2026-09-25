@@ -24,7 +24,7 @@ public final class FTBlocks {
     private static final DeferredRegister.Blocks REGISTER = DeferredRegister.createBlocks(FantasyTechnology.MODID);
     public static final DeferredBlock<FantasyAnnihilationBlock> FANTASY_ANNIHILATION = registerBlockWithItem(
             "fantasy_annihilation",
-            () -> new FantasyAnnihilationBlock(machineProperties()));
+            () -> new FantasyAnnihilationBlock(machineProperties().noOcclusion()));
 
     public static final DeferredBlock<FantasyDeviceAccessBlock> FANTASY_DEVICE_ACCESS = registerBlockWithItem(
             "fantasy_device_access",

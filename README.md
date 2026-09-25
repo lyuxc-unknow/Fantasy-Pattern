@@ -23,6 +23,7 @@
 - An ME crafting device that holds Fantasy Patterns and registers them with the network's crafting service.
 - Crafting is **instant** again: there is no processing timer or Acceleration Card requirement.
 - Every accepted craft consumes one fuel charge. Fuel and its per-item craft count are configured together as `item_id:crafts` (for example, `ae2:matter_ball:100000`); by default, one AE2 Matter Ball supplies **100,000 crafts**, and a batch of N repetitions consumes N charges.
+- A custom open metal frame contains a rotating 4D tesseract, translucent cells and flowing light, all within one block. The inventory item uses a matching model. **Dream effects** in the mod's config screen (or `annihilation_effects` in the client config file) switches between the animated effect and a static lattice, independently for each player, including multiplayer.
 - Matter-ball fuel and the short output-delivery queue survive world or chunk reloads.
 
 ---

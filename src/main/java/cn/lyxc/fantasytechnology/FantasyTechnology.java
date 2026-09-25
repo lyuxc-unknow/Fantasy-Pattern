@@ -6,6 +6,7 @@ import appeng.api.parts.PartModels;
 import appeng.blockentity.AEBaseBlockEntity;
 import appeng.blockentity.AEBaseInvBlockEntity;
 import cn.lyxc.fantasytechnology.config.FTConfig;
+import cn.lyxc.fantasytechnology.config.FTClientConfig;
 import cn.lyxc.fantasytechnology.crafting.FantasyPatternDecoder;
 import cn.lyxc.fantasytechnology.deviceaccess.DeviceRequirementLoader;
 import cn.lyxc.fantasytechnology.deviceaccess.DeviceRequirements;
@@ -44,6 +45,7 @@ public class FantasyTechnology {
     public FantasyTechnology(IEventBus modEventBus, ModContainer modContainer) {
         // Server-side config for fantasy devices and optional OmniSequence batch dispatch.
         modContainer.registerConfig(ModConfig.Type.SERVER, FTConfig.SPEC);
+        modContainer.registerConfig(ModConfig.Type.CLIENT, FTClientConfig.SPEC);
 
         // Load registry classes so their static content gets registered.
         FTBlocks.init(modEventBus);

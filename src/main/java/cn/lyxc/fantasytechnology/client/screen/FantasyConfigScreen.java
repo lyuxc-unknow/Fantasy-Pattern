@@ -1,6 +1,7 @@
 package cn.lyxc.fantasytechnology.client.screen;
 
 import cn.lyxc.fantasytechnology.config.DeviceAccessMode;
+import cn.lyxc.fantasytechnology.config.FTClientConfig;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.*;
@@ -15,14 +16,15 @@ import java.util.List;
 
 /// Native configuration screen exposed through NeoForge's mod list.
 ///
-/// All values belong to the server config. A remote server remains authoritative, so its synced values are visible
-/// but not editable; the screen writes only while an integrated server is running.
+/// Server settings are editable in local worlds; visual effects are a client preference in every world.
 public final class FantasyConfigScreen extends OptionsSubScreen {
 
     private static final int CONTROL_WIDTH = 150;
     private final Draft draft;
     private boolean editable;
+    private boolean clientEditable;
 
+    private Button annihilationEffectsButton;
     private Button batchDispatchButton;
     private Button trustServerParsingButton;
     private Button deviceAccessButton;
@@ -41,12 +43,20 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
     @Override
     protected void init() {
         this.editable = FTConfig.SPEC.isLoaded() && this.minecraft.hasSingleplayerServer();
+        this.clientEditable = FTClientConfig.SPEC.isLoaded();
         super.init();
         setDefaultStatus();
     }
 
     @Override
     protected void addOptions() {
+        this.annihilationEffectsButton = Button.builder(toggleName(draft.annihilationEffects), button -> {
+            draft.annihilationEffects = !draft.annihilationEffects;
+            button.setMessage(toggleName(draft.annihilationEffects));
+        }).width(CONTROL_WIDTH).build();
+        addRow("fantasy_technology.configuration.annihilation_effects", this.annihilationEffectsButton,
+                this.clientEditable);
+
         this.batchDispatchButton = Button.builder(toggleName(draft.batchDispatch), button -> {
             draft.batchDispatch = !draft.batchDispatch;
             button.setMessage(toggleName(draft.batchDispatch));
@@ -116,31 +126,47 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
                 button -> this.minecraft.setScreen(this.lastScreen)).width(96).build());
         Button doneButton = buttons.addChild(Button.builder(CommonComponents.GUI_DONE, button -> save()).width(96).build());
 
-        resetButton.active = this.editable;
-        doneButton.active = this.editable;
+        resetButton.active = this.editable || this.clientEditable;
+        doneButton.active = this.editable || this.clientEditable;
         this.layout.addToFooter(footer);
     }
 
     private void addRow(String translationKey, AbstractWidget control) {
-        control.active = this.editable;
+        addRow(translationKey, control, this.editable);
+    }
+
+    private void addRow(String translationKey, AbstractWidget control, boolean enabled) {
+        control.active = enabled;
         var label = new StringWidget(CONTROL_WIDTH, 20, Component.translatable(translationKey), this.font)
                 .alignLeft();
         this.list.addSmall(label, control);
     }
 
     private void save() {
-        FTConfig.BATCH_DISPATCH_ENABLED.set(draft.batchDispatch);
-        FTConfig.TRUST_SERVER_RECIPE_PARSING.set(draft.trustServerParsing);
-        FTConfig.DEVICE_ACCESS_MODE.set(draft.deviceAccessMode);
-        FTConfig.BLOCKED_JEI_CATEGORY_IDS.set(List.copyOf(draft.blockedCategoryIds));
-        FTConfig.ANNIHILATION_FUEL_ITEMS.set(List.copyOf(draft.fuelItems));
-        FTConfig.CONSUME_FUEL.set(draft.consumeFuel);
-        FTConfig.SPEC.save();
+        if (this.editable) {
+            FTConfig.BATCH_DISPATCH_ENABLED.set(draft.batchDispatch);
+            FTConfig.TRUST_SERVER_RECIPE_PARSING.set(draft.trustServerParsing);
+            FTConfig.DEVICE_ACCESS_MODE.set(draft.deviceAccessMode);
+            FTConfig.BLOCKED_JEI_CATEGORY_IDS.set(List.copyOf(draft.blockedCategoryIds));
+            FTConfig.ANNIHILATION_FUEL_ITEMS.set(List.copyOf(draft.fuelItems));
+            FTConfig.CONSUME_FUEL.set(draft.consumeFuel);
+            FTConfig.SPEC.save();
+        }
+        if (this.clientEditable) {
+            FTClientConfig.ANNIHILATION_EFFECTS.set(draft.annihilationEffects);
+            FTClientConfig.SPEC.save();
+        }
         this.minecraft.setScreen(this.lastScreen);
     }
 
     private void resetDraft() {
-        draft.reset();
+        if (this.editable) {
+            draft.resetServer();
+        }
+        if (this.clientEditable) {
+            draft.resetClient();
+        }
+        annihilationEffectsButton.setMessage(toggleName(draft.annihilationEffects));
         batchDispatchButton.setMessage(toggleName(draft.batchDispatch));
         trustServerParsingButton.setMessage(toggleName(draft.trustServerParsing));
         deviceAccessButton.setMessage(deviceAccessName(draft.deviceAccessMode));
@@ -211,6 +237,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
     }
 
     private static final class Draft {
+        private boolean annihilationEffects;
         private boolean batchDispatch;
         private boolean trustServerParsing;
         private DeviceAccessMode deviceAccessMode;
@@ -220,6 +247,9 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
 
         private static Draft read() {
             var draft = new Draft();
+            draft.annihilationEffects = FTClientConfig.SPEC.isLoaded()
+                    ? FTClientConfig.ANNIHILATION_EFFECTS.get()
+                    : FTClientConfig.ANNIHILATION_EFFECTS.getDefault();
             if (FTConfig.SPEC.isLoaded()) {
                 draft.batchDispatch = FTConfig.BATCH_DISPATCH_ENABLED.get();
                 draft.trustServerParsing = FTConfig.TRUST_SERVER_RECIPE_PARSING.get();
@@ -228,12 +258,16 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
                 draft.fuelItems = new ArrayList<>(FTConfig.ANNIHILATION_FUEL_ITEMS.get());
                 draft.consumeFuel = FTConfig.CONSUME_FUEL.get();
             } else {
-                draft.reset();
+                draft.resetServer();
             }
             return draft;
         }
 
-        private void reset() {
+        private void resetClient() {
+            this.annihilationEffects = FTClientConfig.ANNIHILATION_EFFECTS.getDefault();
+        }
+
+        private void resetServer() {
             this.batchDispatch = FTConfig.BATCH_DISPATCH_ENABLED.getDefault();
             this.trustServerParsing = FTConfig.TRUST_SERVER_RECIPE_PARSING.getDefault();
             this.deviceAccessMode = FTConfig.DEVICE_ACCESS_MODE.getDefault();
