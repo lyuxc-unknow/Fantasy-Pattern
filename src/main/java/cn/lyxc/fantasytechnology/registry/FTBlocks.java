@@ -34,7 +34,8 @@ public final class FTBlocks {
         return BlockBehaviour.Properties.of()
                 .mapColor(MapColor.COLOR_PURPLE)
                 .sound(SoundType.METAL)
-                .strength(3.5F, 6.0F);
+                .strength(3.5F, 6.0F)
+                .requiresCorrectToolForDrops();
     }
 
     private static <T extends Block> DeferredBlock<T> registerBlockWithItem(String name, Supplier<T> block) {
