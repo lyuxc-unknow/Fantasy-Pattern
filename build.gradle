@@ -143,7 +143,7 @@ dependencies {
 
     compileOnly "curse.maven:omnisequence-transfinite-1624558:8941493"
     implementation "curse.maven:applied-enhancements-1665696:8939389"
-    implementation(jarJar("com.ae2vm.addon:ae2vm:1.10.8+modified"))
+    implementation(jarJar("com.ae2vm.addon:ae2vm:2.0.0+modified"))
 
     // runtime only
     localRuntime "org.appliedenergistics:guideme:${guideme_version}"
