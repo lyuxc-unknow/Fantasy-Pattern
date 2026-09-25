@@ -19,13 +19,7 @@ import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Predicate;
 
 /// Default trusted provider. It intentionally exposes only ordinary, fixed-output crafting-table recipes.
@@ -96,8 +90,7 @@ public final class CraftingServerRecipeProvider implements ServerRecipeProvider 
     public Optional<ServerRecipe> find(Level level, ResourceLocation recipeId) {
         return level.getRecipeManager().byKey(recipeId)
                 .filter(holder -> holder.value().getType() == RecipeType.CRAFTING)
-                .map(holder -> resolve(level, holder))
-                .filter(Objects::nonNull);
+                .map(holder -> resolve(level, holder));
     }
 
     private static @Nullable ServerRecipe resolve(Level level, RecipeHolder<?> holder) {
