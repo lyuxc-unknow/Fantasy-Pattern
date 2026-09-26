@@ -43,6 +43,7 @@
   "fantasy_technology.configuration.annihilation_fuel_items": "幻梦分子重构演算样板供应器的催化剂物品与合成次数",
   "fantasy_technology.configuration.consume_fuel": "每次合成是否消耗催化剂",
   "fantasy_technology.configuration.annihilation_effects": "幻梦特效",
+  "fantasy_technology.configuration.device_access_effects": "设备接入方块天体特效",
   "gui.fantasy_technology.transfer_missing_devices": "缺少设备：%s",
   "gui.fantasy_technology.transfer_device_entry": "%1$s× %2$s（已有 %3$s）",
   "gui.fantasy_technology.transfer_device_more": " 等 %s 种",

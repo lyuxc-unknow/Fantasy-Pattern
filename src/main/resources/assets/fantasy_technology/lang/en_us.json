@@ -43,6 +43,7 @@
   "fantasy_technology.configuration.annihilation_fuel_items": "Catalyst items and craft counts for the FMR Pattern Provider",
   "fantasy_technology.configuration.consume_fuel": "Consume catalyst per craft",
   "fantasy_technology.configuration.annihilation_effects": "Dream effects",
+  "fantasy_technology.configuration.device_access_effects": "Device access celestial display",
   "gui.fantasy_technology.transfer_missing_devices": "Missing devices: %s",
   "gui.fantasy_technology.transfer_device_entry": "%1$sx %2$s (have %3$s)",
   "gui.fantasy_technology.transfer_device_more": " and %s more",

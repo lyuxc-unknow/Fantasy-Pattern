@@ -25,6 +25,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
     private boolean clientEditable;
 
     private Button annihilationEffectsButton;
+    private Button deviceAccessEffectsButton;
     private Button batchDispatchButton;
     private Button trustServerParsingButton;
     private Button deviceAccessButton;
@@ -55,6 +56,13 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
             button.setMessage(toggleName(draft.annihilationEffects));
         }).width(CONTROL_WIDTH).build();
         addRow("fantasy_technology.configuration.annihilation_effects", this.annihilationEffectsButton,
+                this.clientEditable);
+
+        this.deviceAccessEffectsButton = Button.builder(toggleName(draft.deviceAccessEffects), button -> {
+            draft.deviceAccessEffects = !draft.deviceAccessEffects;
+            button.setMessage(toggleName(draft.deviceAccessEffects));
+        }).width(CONTROL_WIDTH).build();
+        addRow("fantasy_technology.configuration.device_access_effects", this.deviceAccessEffectsButton,
                 this.clientEditable);
 
         this.batchDispatchButton = Button.builder(toggleName(draft.batchDispatch), button -> {
@@ -154,6 +162,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         }
         if (this.clientEditable) {
             FTClientConfig.ANNIHILATION_EFFECTS.set(draft.annihilationEffects);
+            FTClientConfig.DEVICE_ACCESS_EFFECTS.set(draft.deviceAccessEffects);
             FTClientConfig.SPEC.save();
         }
         this.minecraft.setScreen(this.lastScreen);
@@ -167,6 +176,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
             draft.resetClient();
         }
         annihilationEffectsButton.setMessage(toggleName(draft.annihilationEffects));
+        deviceAccessEffectsButton.setMessage(toggleName(draft.deviceAccessEffects));
         batchDispatchButton.setMessage(toggleName(draft.batchDispatch));
         trustServerParsingButton.setMessage(toggleName(draft.trustServerParsing));
         deviceAccessButton.setMessage(deviceAccessName(draft.deviceAccessMode));
@@ -238,6 +248,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
 
     private static final class Draft {
         private boolean annihilationEffects;
+        private boolean deviceAccessEffects;
         private boolean batchDispatch;
         private boolean trustServerParsing;
         private DeviceAccessMode deviceAccessMode;
@@ -250,6 +261,9 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
             draft.annihilationEffects = FTClientConfig.SPEC.isLoaded()
                     ? FTClientConfig.ANNIHILATION_EFFECTS.get()
                     : FTClientConfig.ANNIHILATION_EFFECTS.getDefault();
+            draft.deviceAccessEffects = FTClientConfig.SPEC.isLoaded()
+                    ? FTClientConfig.DEVICE_ACCESS_EFFECTS.get()
+                    : FTClientConfig.DEVICE_ACCESS_EFFECTS.getDefault();
             if (FTConfig.SPEC.isLoaded()) {
                 draft.batchDispatch = FTConfig.BATCH_DISPATCH_ENABLED.get();
                 draft.trustServerParsing = FTConfig.TRUST_SERVER_RECIPE_PARSING.get();
@@ -265,6 +279,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
 
         private void resetClient() {
             this.annihilationEffects = FTClientConfig.ANNIHILATION_EFFECTS.getDefault();
+            this.deviceAccessEffects = FTClientConfig.DEVICE_ACCESS_EFFECTS.getDefault();
         }
 
         private void resetServer() {

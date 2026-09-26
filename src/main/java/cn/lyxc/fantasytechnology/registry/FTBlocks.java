@@ -28,7 +28,9 @@ public final class FTBlocks {
 
     public static final DeferredBlock<FantasyDeviceAccessBlock> FANTASY_DEVICE_ACCESS = registerBlockWithItem(
             "fantasy_device_access",
-            () -> new FantasyDeviceAccessBlock(machineProperties()));
+            // The model is an open cage, so the block must not occlude: otherwise the cage would shade its own
+            // interior and the celestial display inside it would be drawn in the dark.
+            () -> new FantasyDeviceAccessBlock(machineProperties().noOcclusion()));
 
     private static BlockBehaviour.Properties machineProperties() {
         return BlockBehaviour.Properties.of()

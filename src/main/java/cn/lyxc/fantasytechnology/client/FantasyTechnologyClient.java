@@ -16,6 +16,7 @@ import appeng.init.client.InitScreens;
 
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.client.render.FantasyAnnihilationRenderer;
+import cn.lyxc.fantasytechnology.client.render.FantasyDeviceAccessRenderer;
 import cn.lyxc.fantasytechnology.client.screen.FantasyAnnihilationScreen;
 import cn.lyxc.fantasytechnology.client.screen.FantasyDeviceAccessScreen;
 import cn.lyxc.fantasytechnology.client.screen.FantasyEncodingTermScreen;
@@ -63,6 +64,8 @@ public class FantasyTechnologyClient {
     private void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerBlockEntityRenderer(FTBlockEntities.FANTASY_ANNIHILATION.get(),
                 FantasyAnnihilationRenderer::new);
+        event.registerBlockEntityRenderer(FTBlockEntities.FANTASY_DEVICE_ACCESS.get(),
+                FantasyDeviceAccessRenderer::new);
     }
 
     /// Freeze the server-configured JEI blocklist for this world session. In particular, a config file watcher may
