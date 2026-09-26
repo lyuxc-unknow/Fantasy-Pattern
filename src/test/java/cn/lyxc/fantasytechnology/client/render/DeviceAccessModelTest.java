@@ -9,8 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /// The celestial display is only visible because the block's model leaves its interior open. This holds the model to
 /// that, since nothing else would notice the day someone re-parented it to a solid cube again.
@@ -68,13 +67,14 @@ class DeviceAccessModelTest {
                 for (int other = 0; other < 3; other++) {
                     if (other != axis && (from[other] > 8 || to[other] < 8)) {
                         coversCentre = false;
+                        break;
                     }
                 }
                 if (coversCentre && (from[axis] < 8 && to[axis] > 8)) {
                     blocked = true;
                 }
             }
-            assertTrue(!blocked, "The cage blocks the view along axis " + axis);
+            assertFalse(blocked, "The cage blocks the view along axis " + axis);
         }
     }
 
