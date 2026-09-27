@@ -109,9 +109,16 @@ public class FantasyAnnihilationBlock extends Block implements EntityBlock {
 
     private static void dropInventory(Level level, BlockPos pos, appeng.api.inventories.InternalInventory inventory) {
         for (int i = 0; i < inventory.size(); i++) {
-            var stack = inventory.getStackInSlot(i);
-            if (!stack.isEmpty()) {
-                Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
+            ItemStack stack = inventory.getStackInSlot(i);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            int remaining = stack.getCount();
+            int pieceSize = Math.max(1, stack.getMaxStackSize());
+            while (remaining > 0) {
+                int piece = Math.min(remaining, pieceSize);
+                Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack.copyWithCount(piece));
+                remaining -= piece;
             }
         }
     }

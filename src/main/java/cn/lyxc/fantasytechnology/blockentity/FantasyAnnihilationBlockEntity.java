@@ -65,6 +65,10 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     /** Three catalyst slots. A partially consumed item is tracked by {@link #matterBallCharges}. */
     public static final int CATALYST_SLOTS = 3;
 
+    /// {@link net.minecraft.world.item.ItemStack}'s codec rejects counts outside this range, so a larger catalyst
+    /// stack cannot be written with {@code ItemStack.save} until it is split or stored beside the stack.
+    public static final int VANILLA_ITEM_STACK_SAVE_LIMIT = 99;
+
     /** No idle network power is used; catalyst charges are the machine's only per-craft cost. */
     private static final double IDLE_POWER_USAGE = 0.0;
 
