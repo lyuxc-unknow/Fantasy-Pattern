@@ -13,6 +13,7 @@ import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 /// Menu of the fantasy annihilation block, in the style of AE2's own machine menus (see {@code SkyChestMenu}).
@@ -55,7 +56,14 @@ public class FantasyAnnihilationMenu extends AEBaseMenu {
         super.broadcastChanges();
     }
 
+    public boolean isCatalystSlot(Slot slot) {
+        return slot instanceof CatalystSlot;
+    }
+
     /// Holds more than the item's vanilla stack size. The limit comes from the server config.
+    ///
+    /// The displayed stack is forced to a count of one so vanilla's count text, which is right-aligned and spills out
+    /// of the slot once the number reaches four digits, is not drawn. The screen paints a fitted count instead.
     private static final class CatalystSlot extends AppEngSlot {
 
         CatalystSlot(InternalInventory inv, int index) {
@@ -70,6 +78,15 @@ public class FantasyAnnihilationMenu extends AEBaseMenu {
         @Override
         public int getMaxStackSize(ItemStack stack) {
             return getMaxStackSize();
+        }
+
+        @Override
+        public ItemStack getDisplayStack() {
+            ItemStack stack = super.getDisplayStack();
+            if (stack.isEmpty() || stack.getCount() <= 1) {
+                return stack;
+            }
+            return stack.copyWithCount(1);
         }
     }
 
