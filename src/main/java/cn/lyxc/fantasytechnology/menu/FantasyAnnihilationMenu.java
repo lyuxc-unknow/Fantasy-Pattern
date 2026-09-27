@@ -8,6 +8,7 @@ import appeng.menu.implementations.MenuTypeBuilder;
 import appeng.menu.slot.AppEngSlot;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
+import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
@@ -39,7 +40,10 @@ public class FantasyAnnihilationMenu extends AEBaseMenu {
         for (int i = 0; i < patternInv.size(); i++) {
             addSlot(new PatternDisplaySlot(patternInv, i), SlotSemantics.ENCODED_PATTERN);
         }
-        addSlot(new AppEngSlot(annihilation.getMatterBallInv(), 0), SlotSemantics.STORAGE);
+        var catalystInv = annihilation.getMatterBallInv();
+        for (int i = 0; i < catalystInv.size(); i++) {
+            addSlot(new CatalystSlot(catalystInv, i), SlotSemantics.STORAGE);
+        }
 
         createPlayerInventorySlots(playerInventory);
     }
@@ -49,6 +53,24 @@ public class FantasyAnnihilationMenu extends AEBaseMenu {
         waitingForGrid = annihilation.isWaitingForGrid();
         matterBallCharges = annihilation.getMatterBallCharges();
         super.broadcastChanges();
+    }
+
+    /// Holds more than the item's vanilla stack size. The limit comes from the server config.
+    private static final class CatalystSlot extends AppEngSlot {
+
+        CatalystSlot(InternalInventory inv, int index) {
+            super(inv, index);
+        }
+
+        @Override
+        public int getMaxStackSize() {
+            return FTConfig.catalystSlotLimit();
+        }
+
+        @Override
+        public int getMaxStackSize(ItemStack stack) {
+            return getMaxStackSize();
+        }
     }
 
     /// Shows the first output of an encoded fantasy pattern instead of the pattern item itself, like AE2's own

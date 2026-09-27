@@ -19,6 +19,7 @@ public final class FTConfig {
     public static final ModConfigSpec.EnumValue<DeviceAccessMode> DEVICE_ACCESS_MODE;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> BLOCKED_JEI_CATEGORY_IDS;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> ANNIHILATION_FUEL_ITEMS;
+    public static final ModConfigSpec.IntValue CATALYST_SLOT_LIMIT;
     public static final ModConfigSpec.BooleanValue CONSUME_FUEL;
 
     public static final List<String> DEFAULT_BLOCKED_JEI_CATEGORY_IDS = List.of(
@@ -27,6 +28,9 @@ public final class FTConfig {
             "minecraft:tag_recipes/block",
             "ae2:attunement");
     public static final List<String> DEFAULT_ANNIHILATION_FUEL_ITEMS = List.of("ae2:matter_ball:100000");
+    public static final int DEFAULT_CATALYST_SLOT_LIMIT = 512;
+    public static final int MIN_CATALYST_SLOT_LIMIT = 1;
+    public static final int MAX_CATALYST_SLOT_LIMIT = 9999;
 
     public record AnnihilationFuel(ResourceLocation itemId, int crafts) {
     }
@@ -66,17 +70,25 @@ public final class FTConfig {
                 .defineListAllowEmpty("blocked_jei_category_ids", DEFAULT_BLOCKED_JEI_CATEGORY_IDS,
                         value -> value instanceof String id && ResourceLocation.tryParse(id) != null);
         ANNIHILATION_FUEL_ITEMS = BUILDER
-                .comment("Fuel accepted by the fantasy annihilation block, formatted as <item id>:<crafts>.",
+                .comment("Catalyst items accepted by the FMR Pattern Provider, formatted as <item id>:<crafts>.",
                         "The final colon separates the item id from its positive craft count.",
-                        "Changes apply immediately to newly inserted fuel; existing charges are unchanged.",
+                        "Changes apply immediately to newly inserted catalysts; charges already stored are unchanged.",
                         "Default: [\"ae2:matter_ball:100000\"]")
                 .translation("fantasy_technology.configuration.annihilation_fuel_items")
                 .defineListAllowEmpty("annihilation_fuel_items", DEFAULT_ANNIHILATION_FUEL_ITEMS,
                         value -> value instanceof String entry && parseAnnihilationFuel(entry) != null);
+        CATALYST_SLOT_LIMIT = BUILDER
+                .comment("How many catalyst items each of the three catalyst slots can hold.",
+                        "This limit can be higher than the item's normal stack size.",
+                        "Changes apply immediately to new insertions; items already in a slot are left in place.",
+                        "Default: 512")
+                .translation("fantasy_technology.configuration.catalyst_slot_limit")
+                .defineInRange("catalyst_slot_limit", DEFAULT_CATALYST_SLOT_LIMIT,
+                        MIN_CATALYST_SLOT_LIMIT, MAX_CATALYST_SLOT_LIMIT);
         CONSUME_FUEL = BUILDER
-                .comment("Whether the fantasy annihilation block consumes matter-ball fuel (or other configured",
-                        "fuel items) on each craft. When false the machine crafts for free: the fuel slot keeps",
-                        "storing items and prepaid charges are never touched. Changes take effect immediately.")
+                .comment("Whether the FMR Pattern Provider consumes one catalyst charge on each craft.",
+                        "When false the machine crafts for free: catalyst slots and prepaid charges are never touched.",
+                        "Changes take effect immediately.")
                 .translation("fantasy_technology.configuration.consume_fuel")
                 .define("consume_fuel", true);
 
@@ -107,5 +119,13 @@ public final class FTConfig {
     public static @Nullable String normalizeAnnihilationFuel(String configured) {
         AnnihilationFuel fuel = parseAnnihilationFuel(configured);
         return fuel == null ? null : fuel.itemId() + ":" + fuel.crafts();
+    }
+
+    /// Per-slot catalyst stack size. Falls back to the default before the server config is loaded.
+    public static int catalystSlotLimit() {
+        if (!SPEC.isLoaded()) {
+            return DEFAULT_CATALYST_SLOT_LIMIT;
+        }
+        return CATALYST_SLOT_LIMIT.get();
     }
 }

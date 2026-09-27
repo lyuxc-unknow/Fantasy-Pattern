@@ -41,6 +41,7 @@
   "fantasy_technology.configuration.device_access_mode": "编码所需设备限制",
   "fantasy_technology.configuration.blocked_jei_category_ids": "禁止转移的 JEI 配方类别 ID",
   "fantasy_technology.configuration.annihilation_fuel_items": "幻梦分子重构演算样板供应器的催化剂物品与合成次数",
+  "fantasy_technology.configuration.catalyst_slot_limit": "每格催化剂数量上限",
   "fantasy_technology.configuration.consume_fuel": "每次合成是否消耗催化剂",
   "fantasy_technology.configuration.annihilation_effects": "幻梦特效",
   "fantasy_technology.configuration.device_access_effects": "设备接入方块天体特效",
@@ -63,6 +64,7 @@
   "fantasy_technology.config.fuel_items.title": "催化剂物品",
   "fantasy_technology.config.fuel_entry": "物品 ID:合成次数",
   "fantasy_technology.config.invalid_fuel_entry": "无效的催化剂配置：%s（格式应为物品 ID:合成次数）",
+  "fantasy_technology.config.invalid_catalyst_slot_limit": "无效的催化剂堆叠上限（应为 1 到 9999）",
   "fantasy_technology.config.add": "添加",
   "fantasy_technology.config.remove": "删除",
   "fantasy_technology.config.reset": "重置"

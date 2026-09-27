@@ -5,6 +5,7 @@ import appeng.client.gui.style.PaletteColor;
 import appeng.client.gui.style.ScreenStyle;
 import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.menu.FantasyAnnihilationMenu;
+import cn.lyxc.fantasytechnology.util.CompactCount;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -30,15 +31,15 @@ public class FantasyAnnihilationScreen extends AEBaseScreen<FantasyAnnihilationM
     @Override
     public void drawFG(GuiGraphics guiGraphics, int offsetX, int offsetY, int mouseX, int mouseY) {
         int color = style.getColor(PaletteColor.DEFAULT_TEXT_COLOR).toARGB();
+        // Three catalyst slots occupy x=8..62. Status uses the free row above them; the label and count sit to the right.
+        guiGraphics.drawString(font, statusText(), 8, 97, color, false);
         guiGraphics.drawString(font,
                 Component.translatable("gui.fantasy_technology.fantasy_annihilation.matter_ball"),
-                8, 97, color, false);
-
+                66, 109, color, false);
         guiGraphics.drawString(font,
                 Component.translatable("gui.fantasy_technology.fantasy_annihilation.matter_ball_charges",
-                        menu.matterBallCharges),
-                32, 109, color, false);
-        guiGraphics.drawString(font, statusText(), 32, 120, color, false);
+                        CompactCount.format(menu.matterBallCharges)),
+                66, 118, color, false);
     }
 
     private Component statusText() {

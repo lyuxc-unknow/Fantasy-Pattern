@@ -62,14 +62,14 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     public static final int PATTERN_SLOTS = 36;
 
-    /** One visible fuel slot; partially used balls are represented by {@link #matterBallCharges}. */
-    private static final int MATTER_BALL_SLOTS = 1;
+    /** Three catalyst slots. A partially consumed item is tracked by {@link #matterBallCharges}. */
+    public static final int CATALYST_SLOTS = 3;
 
-    /** No idle network power is used; matter-ball fuel is the machine's only per-craft cost. */
+    /** No idle network power is used; catalyst charges are the machine's only per-craft cost. */
     private static final double IDLE_POWER_USAGE = 0.0;
 
     private final AppEngInternalInventory patternInv = new AppEngInternalInventory(this, PATTERN_SLOTS, 1);
-    private final AppEngInternalInventory matterBallInv = new AppEngInternalInventory(this, MATTER_BALL_SLOTS, 64);
+    private final CatalystInventory matterBallInv = new CatalystInventory(this, CATALYST_SLOTS);
 
     /// Outputs waiting for the next grid tick so the CPU has time to register its expected result.
     ///
@@ -117,11 +117,20 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     }
 
     public long getMatterBallCharges() {
-        ItemStack stack = matterBallInv.getStackInSlot(0);
-        long storedCharges = (long) stack.getCount() * craftsPerFuel(stack);
-        return Long.MAX_VALUE - matterBallCharges < storedCharges
-                ? Long.MAX_VALUE
-                : matterBallCharges + storedCharges;
+        long total = matterBallCharges;
+        for (int slot = 0; slot < matterBallInv.size(); slot++) {
+            ItemStack stack = matterBallInv.getStackInSlot(slot);
+            int craftsPerCatalyst = craftsPerFuel(stack);
+            if (stack.isEmpty() || craftsPerCatalyst <= 0) {
+                continue;
+            }
+            long storedCharges = (long) stack.getCount() * craftsPerCatalyst;
+            if (Long.MAX_VALUE - total < storedCharges) {
+                return Long.MAX_VALUE;
+            }
+            total += storedCharges;
+        }
+        return total;
     }
 
     @Override
@@ -132,7 +141,7 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
 
     @Override
     protected InternalInventory getExposedInventoryForSide(Direction side) {
-        // Fuel slot on all sides; consumable input via the exposed API.
+        // Catalyst slots on all sides; automation inserts through the exposed item handler.
         return matterBallInv;
     }
 
@@ -154,28 +163,43 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         if (!FTConfig.CONSUME_FUEL.get()) {
             return;
         }
-        long fromCharges = Math.min(matterBallCharges, crafts);
-        matterBallCharges -= fromCharges;
-        long remaining = crafts - fromCharges;
-        if (remaining == 0) {
-            return;
+        long charges = matterBallCharges;
+        long remaining = crafts - Math.min(charges, crafts);
+        charges -= Math.min(matterBallCharges, crafts);
+
+        int[] taken = new int[matterBallInv.size()];
+        for (int slot = 0; slot < matterBallInv.size() && remaining > 0; slot++) {
+            ItemStack stack = matterBallInv.getStackInSlot(slot);
+            int craftsPerCatalyst = craftsPerFuel(stack);
+            if (stack.isEmpty() || craftsPerCatalyst <= 0) {
+                continue;
+            }
+            long itemsNeeded = Math.floorDiv(remaining - 1, craftsPerCatalyst) + 1;
+            int itemsUsed = (int) Math.min(stack.getCount(), itemsNeeded);
+            taken[slot] = itemsUsed;
+            long produced = Math.multiplyExact((long) itemsUsed, craftsPerCatalyst);
+            if (produced >= remaining) {
+                charges = produced - remaining;
+                remaining = 0;
+            } else {
+                remaining -= produced;
+            }
+        }
+        if (remaining > 0) {
+            throw new IllegalStateException("Catalyst balance changed during an instant craft");
         }
 
-        ItemStack stack = matterBallInv.getStackInSlot(0).copy();
-        int craftsPerFuel = craftsPerFuel(stack);
-        if (craftsPerFuel <= 0) {
-            throw new IllegalStateException("Fuel configuration changed during an instant craft");
-        }
-        long fuelItems = Math.floorDiv(remaining - 1, craftsPerFuel) + 1;
-        if (fuelItems > stack.getCount()) {
-            throw new IllegalStateException("Fuel balance changed during an instant craft");
-        }
-        stack.shrink(Math.toIntExact(fuelItems));
-        matterBallCharges = Math.multiplyExact(fuelItems, craftsPerFuel) - remaining;
-
+        matterBallCharges = charges;
         consumingMatterBallSlot = true;
         try {
-            matterBallInv.setItemDirect(0, stack);
+            for (int slot = 0; slot < taken.length; slot++) {
+                if (taken[slot] <= 0) {
+                    continue;
+                }
+                ItemStack stack = matterBallInv.getStackInSlot(slot).copy();
+                stack.shrink(taken[slot]);
+                matterBallInv.setItemDirect(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
+            }
         } finally {
             consumingMatterBallSlot = false;
         }

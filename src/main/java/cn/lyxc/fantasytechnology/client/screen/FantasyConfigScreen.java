@@ -31,6 +31,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
     private Button deviceAccessButton;
     private Button blockedCategoriesButton;
     private Button fuelItemsButton;
+    private EditBox catalystSlotLimitInput;
     private Button consumeFuelButton;
     private StringWidget statusWidget;
 
@@ -115,6 +116,13 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         this.fuelItemsButton.active = this.editable;
         this.list.addSmall(this.fuelItemsButton, null);
 
+        this.catalystSlotLimitInput = new EditBox(this.font, 0, 0, CONTROL_WIDTH, 20,
+                Component.translatable("fantasy_technology.configuration.catalyst_slot_limit"));
+        this.catalystSlotLimitInput.setMaxLength(4);
+        this.catalystSlotLimitInput.setValue(Integer.toString(draft.catalystSlotLimit));
+        this.catalystSlotLimitInput.setFilter(FantasyConfigScreen::digitsOnly);
+        addRow("fantasy_technology.configuration.catalyst_slot_limit", this.catalystSlotLimitInput);
+
         this.consumeFuelButton = Button.builder(toggleName(draft.consumeFuel), button -> {
             draft.consumeFuel = !draft.consumeFuel;
             button.setMessage(toggleName(draft.consumeFuel));
@@ -152,11 +160,18 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
 
     private void save() {
         if (this.editable) {
+            Integer slotLimit = parseCatalystSlotLimit();
+            if (slotLimit == null) {
+                setStatus(Component.translatable("fantasy_technology.config.invalid_catalyst_slot_limit"), 0xFFFF5555);
+                return;
+            }
+            draft.catalystSlotLimit = slotLimit;
             FTConfig.BATCH_DISPATCH_ENABLED.set(draft.batchDispatch);
             FTConfig.TRUST_SERVER_RECIPE_PARSING.set(draft.trustServerParsing);
             FTConfig.DEVICE_ACCESS_MODE.set(draft.deviceAccessMode);
             FTConfig.BLOCKED_JEI_CATEGORY_IDS.set(List.copyOf(draft.blockedCategoryIds));
             FTConfig.ANNIHILATION_FUEL_ITEMS.set(List.copyOf(draft.fuelItems));
+            FTConfig.CATALYST_SLOT_LIMIT.set(slotLimit);
             FTConfig.CONSUME_FUEL.set(draft.consumeFuel);
             FTConfig.SPEC.save();
         }
@@ -182,8 +197,30 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         deviceAccessButton.setMessage(deviceAccessName(draft.deviceAccessMode));
         updateBlockedCategoriesButton();
         updateFuelItemsButton();
+        this.catalystSlotLimitInput.setValue(Integer.toString(draft.catalystSlotLimit));
         consumeFuelButton.setMessage(toggleName(draft.consumeFuel));
         setDefaultStatus();
+    }
+
+    private Integer parseCatalystSlotLimit() {
+        try {
+            int value = Integer.parseInt(this.catalystSlotLimitInput.getValue().trim());
+            if (value >= FTConfig.MIN_CATALYST_SLOT_LIMIT && value <= FTConfig.MAX_CATALYST_SLOT_LIMIT) {
+                return value;
+            }
+        } catch (NumberFormatException ignored) {
+            // The field filter already rejects non-digits; an empty box still fails here.
+        }
+        return null;
+    }
+
+    private static boolean digitsOnly(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void updateBlockedCategoriesButton() {
@@ -254,6 +291,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
         private DeviceAccessMode deviceAccessMode;
         private List<String> blockedCategoryIds;
         private List<String> fuelItems;
+        private int catalystSlotLimit;
         private boolean consumeFuel;
 
         private static Draft read() {
@@ -270,6 +308,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
                 draft.deviceAccessMode = FTConfig.DEVICE_ACCESS_MODE.get();
                 draft.blockedCategoryIds = new ArrayList<>(FTConfig.BLOCKED_JEI_CATEGORY_IDS.get());
                 draft.fuelItems = new ArrayList<>(FTConfig.ANNIHILATION_FUEL_ITEMS.get());
+                draft.catalystSlotLimit = FTConfig.CATALYST_SLOT_LIMIT.get();
                 draft.consumeFuel = FTConfig.CONSUME_FUEL.get();
             } else {
                 draft.resetServer();
@@ -288,6 +327,7 @@ public final class FantasyConfigScreen extends OptionsSubScreen {
             this.deviceAccessMode = FTConfig.DEVICE_ACCESS_MODE.getDefault();
             this.blockedCategoryIds = new ArrayList<>(FTConfig.DEFAULT_BLOCKED_JEI_CATEGORY_IDS);
             this.fuelItems = new ArrayList<>(FTConfig.DEFAULT_ANNIHILATION_FUEL_ITEMS);
+            this.catalystSlotLimit = FTConfig.CATALYST_SLOT_LIMIT.getDefault();
             this.consumeFuel = FTConfig.CONSUME_FUEL.getDefault();
         }
     }
