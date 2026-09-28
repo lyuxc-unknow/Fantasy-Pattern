@@ -33,6 +33,7 @@
   "gui.fantasy_technology.fantasy_annihilation.status.no_matter_ball": "缺少催化剂",
   "gui.fantasy_technology.fantasy_annihilation.matter_ball": "催化剂",
   "gui.fantasy_technology.fantasy_annihilation.matter_ball_charges": "次数：%s",
+  "gui.fantasy_technology.fantasy_annihilation.matter_ball_charges_exact": "次数：%s",
   "fantasy_technology.configuration.batch_dispatch_enabled": "向幻梦分子重构演算样板供应器批量发配",
   "fantasy_technology.configuration.trust_server_recipe_parsing": "信任服务端配方解析",
   "block.fantasy_technology.fantasy_device_access": "幻梦设备接入方块",

@@ -72,7 +72,7 @@ final class CatalystInventory extends AppEngInternalInventory {
         if (inSlot.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        // One take matches a normal stack of this item, usually 64. Larger amounts stay in the slot.
+        // One take matches this item's own stack size. The menu uses the same limit when something lands on the cursor.
         int taken = Math.min(amount, Math.min(inSlot.getCount(), Math.max(1, inSlot.getMaxStackSize())));
         ItemStack extracted = inSlot.copy();
         extracted.setCount(taken);
@@ -120,25 +120,38 @@ final class CatalystInventory extends AppEngInternalInventory {
 
     @Override
     public void readFromNBT(CompoundTag data, String name, HolderLookup.Provider registries) {
-        super.readFromNBT(data, name, registries);
-        if (!data.contains(name, Tag.TAG_LIST)) {
-            return;
-        }
-        ListTag list = data.getList(name, Tag.TAG_COMPOUND);
-        for (int i = 0; i < list.size(); i++) {
-            CompoundTag tag = list.getCompound(i);
-            if (!tag.contains(REAL_COUNT, Tag.TAG_INT)) {
-                continue;
+        // Empty slots are omitted from the list. Applying the tag onto an existing inventory has to clear them, or a
+        // consumed slot keeps its old stack. Notifications are suppressed: loading must not save the block entity.
+        InternalInventoryHost host = getHost();
+        setHost(null);
+        try {
+            for (int slot = 0; slot < size(); slot++) {
+                setItemDirect(slot, ItemStack.EMPTY);
             }
-            int slot = tag.getInt("Slot");
-            int count = tag.getInt(REAL_COUNT);
-            if (slot < 0 || slot >= size() || count <= 0) {
-                continue;
+            super.readFromNBT(data, name, registries);
+            if (!data.contains(name, Tag.TAG_LIST)) {
+                return;
             }
-            ItemStack stack = getStackInSlot(slot);
-            if (!stack.isEmpty()) {
-                stack.setCount(count);
+            ListTag list = data.getList(name, Tag.TAG_COMPOUND);
+            for (int i = 0; i < list.size(); i++) {
+                CompoundTag tag = list.getCompound(i);
+                if (!tag.contains(REAL_COUNT, Tag.TAG_INT)) {
+                    continue;
+                }
+                int slot = tag.getInt("Slot");
+                int count = tag.getInt(REAL_COUNT);
+                if (slot < 0 || slot >= size() || count <= 0) {
+                    continue;
+                }
+                ItemStack stack = getStackInSlot(slot);
+                if (!stack.isEmpty()) {
+                    // A lowered slot limit leaves items already stored here in place. Only a count past the mod's own
+                    // maximum is reduced, so a corrupt value cannot overflow the charge total.
+                    stack.setCount(Math.min(count, FTConfig.MAX_CATALYST_SLOT_LIMIT));
+                }
             }
+        } finally {
+            setHost(host);
         }
     }
 }

@@ -12,6 +12,8 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.Locale;
+
 /// Screen of the fantasy annihilation block, drawn by AE2's screen framework like any of its own machine menus: the
 /// panel and slot positions come from the style document, the slots themselves are ordinary {@code AppEngSlot}s.
 public class FantasyAnnihilationScreen extends AEBaseScreen<FantasyAnnihilationMenu> {
@@ -24,6 +26,13 @@ public class FantasyAnnihilationScreen extends AEBaseScreen<FantasyAnnihilationM
     private static final int COUNT_TOP = 9;
     /// Widest count that still sits inside the icon. Wider numbers, such as 9999, are scaled down to this width.
     private static final int COUNT_MAX_WIDTH = 16;
+    /// Catalyst label and compact use count, to the right of the three slots.
+    private static final int CATALYST_TEXT_X = 66;
+    private static final int CATALYST_LABEL_Y = 109;
+    private static final int USES_Y = 118;
+
+    /// Set while drawing, then read after the screen pose is popped so the tooltip uses screen coordinates.
+    private boolean chargesHovered;
 
     public FantasyAnnihilationScreen(FantasyAnnihilationMenu menu, Inventory playerInventory, Component title,
             ScreenStyle style) {
@@ -37,18 +46,37 @@ public class FantasyAnnihilationScreen extends AEBaseScreen<FantasyAnnihilationM
     }
 
     @Override
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (chargesHovered) {
+            guiGraphics.renderTooltip(font, exactUsesText(), mouseX, mouseY);
+        }
+    }
+
+    @Override
     public void drawFG(GuiGraphics guiGraphics, int offsetX, int offsetY, int mouseX, int mouseY) {
         int color = style.getColor(PaletteColor.DEFAULT_TEXT_COLOR).toARGB();
         // Three catalyst slots occupy x=8..62. Status uses the free row above them; the label and count sit to the right.
         guiGraphics.drawString(font, statusText(), 8, 97, color, false);
-        guiGraphics.drawString(font,
-                Component.translatable("gui.fantasy_technology.fantasy_annihilation.matter_ball"),
-                66, 109, color, false);
-        guiGraphics.drawString(font,
-                Component.translatable("gui.fantasy_technology.fantasy_annihilation.matter_ball_charges",
-                        CompactCount.format(menu.matterBallCharges)),
-                66, 118, color, false);
+        Component label = Component.translatable("gui.fantasy_technology.fantasy_annihilation.matter_ball");
+        Component uses = Component.translatable("gui.fantasy_technology.fantasy_annihilation.matter_ball_charges",
+                CompactCount.format(menu.matterBallCharges));
+        guiGraphics.drawString(font, label, CATALYST_TEXT_X, CATALYST_LABEL_Y, color, false);
+        guiGraphics.drawString(font, uses, CATALYST_TEXT_X, USES_Y, color, false);
+        chargesHovered = hoveringCatalystText(mouseX - offsetX, mouseY - offsetY,
+                Math.max(font.width(label), font.width(uses)));
         drawCatalystCounts(guiGraphics);
+    }
+
+    /// The compact use count keeps its short form. The exact total is the tooltip on this label and the line under it.
+    private boolean hoveringCatalystText(int localX, int localY, int textWidth) {
+        return localX >= CATALYST_TEXT_X && localX < CATALYST_TEXT_X + textWidth
+                && localY >= CATALYST_LABEL_Y && localY < USES_Y + font.lineHeight;
+    }
+
+    private Component exactUsesText() {
+        return Component.translatable("gui.fantasy_technology.fantasy_annihilation.matter_ball_charges_exact",
+                String.format(Locale.US, "%,d", menu.matterBallCharges));
     }
 
     /// Stack counts stay inside the catalyst slot. Two-digit counts keep vanilla's size and position; wider counts

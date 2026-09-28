@@ -33,6 +33,7 @@
   "gui.fantasy_technology.fantasy_annihilation.status.no_matter_ball": "No catalyst",
   "gui.fantasy_technology.fantasy_annihilation.matter_ball": "Catalyst",
   "gui.fantasy_technology.fantasy_annihilation.matter_ball_charges": "Uses: %s",
+  "gui.fantasy_technology.fantasy_annihilation.matter_ball_charges_exact": "Uses: %s",
   "fantasy_technology.configuration.batch_dispatch_enabled": "Batch dispatch to the FMR Pattern Provider",
   "fantasy_technology.configuration.trust_server_recipe_parsing": "Trust server recipe parsing",
   "block.fantasy_technology.fantasy_device_access": "Fantasy Device Access Block",

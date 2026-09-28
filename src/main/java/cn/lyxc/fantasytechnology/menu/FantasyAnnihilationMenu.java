@@ -12,6 +12,8 @@ import cn.lyxc.fantasytechnology.config.FTConfig;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -60,6 +62,98 @@ public class FantasyAnnihilationMenu extends AEBaseMenu {
         return slot instanceof CatalystSlot;
     }
 
+    /// A click puts at most one stack of that item on the cursor or in a hotbar slot. Shift-click still fills the
+    /// inventory, and a right-click whose half is larger than one stack sends the remainder there too.
+    @Override
+    public void clicked(int slotId, int button, ClickType clickType, Player player) {
+        if (slotId >= 0 && slotId < slots.size() && slots.get(slotId) instanceof CatalystSlot slot
+                && handleCatalystClick(slot, button, clickType, player)) {
+            return;
+        }
+        super.clicked(slotId, button, clickType, player);
+    }
+
+    /// @return true when the click must not fall through to the vanilla slot transfer
+    private boolean handleCatalystClick(CatalystSlot slot, int button, ClickType clickType, Player player) {
+        ItemStack inSlot = slot.getItem();
+        if (clickType == ClickType.PICKUP && button == 1 && getCarried().isEmpty() && slot.mayPickup(player)) {
+            int half = (inSlot.getCount() + 1) / 2;
+            if (half > handfulSize(inSlot)) {
+                takeHalf(player, slot, half);
+                return true;
+            }
+        }
+        if (clickType == ClickType.PICKUP && !getCarried().isEmpty() && !inSlot.isEmpty()
+                && inSlot.getCount() > handfulSize(inSlot)
+                && !ItemStack.isSameItemSameComponents(inSlot, getCarried())) {
+            return true;
+        }
+        if (clickType == ClickType.SWAP && isHotbarButton(button)) {
+            return handleCatalystSwap(player, slot, button);
+        }
+        return false;
+    }
+
+    /// Right-click takes half of the slot. One stack of that item goes to the cursor, and the rest of the half goes
+    /// into the player inventory as ordinary stacks.
+    private void takeHalf(Player player, CatalystSlot slot, int half) {
+        int toCursor = Math.min(half, handfulSize(slot.getItem()));
+        setCarried(slot.extractUpTo(toCursor));
+        int rest = half - getCarried().getCount();
+        if (rest > 0) {
+            ItemStack extra = slot.extractUpTo(rest);
+            player.getInventory().add(extra);
+            if (!extra.isEmpty()) {
+                ItemStack returned = slot.safeInsert(extra);
+                if (!returned.isEmpty()) {
+                    player.drop(returned, false);
+                }
+            }
+        }
+        slot.setChanged();
+    }
+
+    /// @return true when vanilla must not move the whole catalyst stack into one hotbar slot
+    private boolean handleCatalystSwap(Player player, CatalystSlot slot, int button) {
+        if (button == Inventory.SLOT_OFFHAND && isPlayerInventorySlotLocked(button)) {
+            return true;
+        }
+        ItemStack inSlot = slot.getItem();
+        int handful = handfulSize(inSlot);
+        if (inSlot.isEmpty() || inSlot.getCount() <= handful) {
+            return false;
+        }
+        ItemStack hotbar = player.getInventory().getItem(button);
+        if (!slot.mayPickup(player)) {
+            return true;
+        }
+        if (hotbar.isEmpty()) {
+            player.getInventory().setItem(button, slot.extractUpTo(handful));
+            slot.setChanged();
+            return true;
+        }
+        if (ItemStack.isSameItemSameComponents(inSlot, hotbar)) {
+            int room = hotbar.getMaxStackSize() - hotbar.getCount();
+            if (room > 0) {
+                ItemStack moved = slot.extractUpTo(Math.min(room, handful));
+                hotbar.grow(moved.getCount());
+                player.getInventory().setItem(button, hotbar);
+                slot.setChanged();
+            }
+            return true;
+        }
+        return true;
+    }
+
+    private static boolean isHotbarButton(int button) {
+        return (button >= 0 && button < 9) || button == Inventory.SLOT_OFFHAND;
+    }
+
+    /// How many of this item fit in one ordinary stack.
+    private static int handfulSize(ItemStack stack) {
+        return Math.max(1, stack.getMaxStackSize());
+    }
+
     /// Holds more than the item's vanilla stack size. The limit comes from the server config.
     ///
     /// The displayed stack is forced to a count of one so vanilla's count text, which is right-aligned and spills out
@@ -78,6 +172,31 @@ public class FantasyAnnihilationMenu extends AEBaseMenu {
         @Override
         public int getMaxStackSize(ItemStack stack) {
             return getMaxStackSize();
+        }
+
+        /// Menu clicks ask for the whole stack or half of it. The cursor and a thrown entity take one stack of this
+        /// item; a larger move goes through {@link #extractUpTo}.
+        @Override
+        public ItemStack remove(int amount) {
+            if (amount <= 0) {
+                return ItemStack.EMPTY;
+            }
+            ItemStack inSlot = getItem();
+            int limit = inSlot.isEmpty() ? 0 : handfulSize(inSlot);
+            return extractUpTo(Math.min(amount, limit));
+        }
+
+        /// Removes up to {@code amount} items, ignoring the vanilla stack size. The caller places the result somewhere
+        /// that can hold it.
+        ItemStack extractUpTo(int amount) {
+            ItemStack inSlot = getItem();
+            if (amount <= 0 || inSlot.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+            int taken = Math.min(amount, inSlot.getCount());
+            ItemStack extracted = inSlot.copyWithCount(taken);
+            set(taken >= inSlot.getCount() ? ItemStack.EMPTY : inSlot.copyWithCount(inSlot.getCount() - taken));
+            return extracted;
         }
 
         @Override

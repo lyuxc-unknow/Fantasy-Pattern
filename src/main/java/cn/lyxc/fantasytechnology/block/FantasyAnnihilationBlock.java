@@ -113,10 +113,11 @@ public class FantasyAnnihilationBlock extends Block implements EntityBlock {
             if (stack.isEmpty()) {
                 continue;
             }
+            // Item entities are saved with the vanilla item codec, which rejects counts above 99. One entity per
+            // handful stays pickable and keeps a full catalyst slot from spawning thousands of entities.
             int remaining = stack.getCount();
-            int pieceSize = Math.max(1, stack.getMaxStackSize());
             while (remaining > 0) {
-                int piece = Math.min(remaining, pieceSize);
+                int piece = Math.min(remaining, FantasyAnnihilationBlockEntity.VANILLA_ITEM_STACK_SAVE_LIMIT);
                 Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack.copyWithCount(piece));
                 remaining -= piece;
             }
