@@ -142,8 +142,9 @@ dependencies {
     localRuntime "mekanism:Mekanism:${mekanism_version}:tools"
 
     compileOnly "curse.maven:omnisequence-transfinite-1624558:8941493"
-    implementation "curse.maven:applied-enhancements-1665696:8939389"
-    implementation(jarJar("com.ae2vm.addon:ae2vm:2.0.0+modified"))
+    compileOnly "curse.maven:applied-enhancements-1665696:8939389"
+    localRuntime "curse.maven:applied-enhancements-1665696:8939389"
+    implementation(jarJar("com.ae2vm.addon:ae2vm:2.0.2+modified"))
 
     // runtime only
     localRuntime "org.appliedenergistics:guideme:${guideme_version}"

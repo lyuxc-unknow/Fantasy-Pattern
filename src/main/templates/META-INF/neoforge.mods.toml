@@ -45,6 +45,15 @@ license="${mod_license}"
     ordering="AFTER"
     side="BOTH"
 
+# AelisPlannerMixin is written against 1.0.9, the version this integration was verified on. The mixin's injector is
+# declared require = 0, so a release that moves the private method it targets costs the fix rather than the game.
+[[dependencies.fantasy_technology]]
+    modId="appliedenhancements"
+    type="optional"
+    versionRange="[1.0.9,)"
+    ordering="AFTER"
+    side="BOTH"
+
 [[dependencies.fantasy_technology]]
     modId="jei"
     type="required"
