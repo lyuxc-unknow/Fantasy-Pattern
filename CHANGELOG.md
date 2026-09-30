@@ -24,6 +24,12 @@
 
 ### Fixed
 
+- Reject an entire JEI transfer when any nonempty ingredient or output cannot be represented, including Mekanism chemicals without Applied Mekanistics.
+- Consume damageable ingredients unless the item declares a crafting remainder; bows used in dispensers are no longer returned. The automatic crafting provider excludes recipes overriding the grid-level remainder calculation.
+- Refresh loaded AE2 pattern providers after successful datapack reloads and authorization-mode changes, and check the current mode again before accepting inputs or fuel.
+- Fingerprint complete key components with canonical, versioned serialization. **Existing trusted patterns must be selected and encoded again after updating.** Provider integrations with dynamic components should pass the world's registry lookup to `ServerRecipe`.
+- Persist the trusted recipe selection with the terminal, share it across viewers, and revalidate it at encoding time. Disable unsupported amount and ignore-data edits in trusted mode.
+- Preserve all existing configuration-list entries, including lists longer than 128 rows.
 - Rendered the server recipe provider as a modal top-level overlay so AE2 and JEI elements, overlays, and tooltips cannot cover it or intercept its input.
 - Restored client-mode JEI transfer for categories whose viewer id differs from their server recipe type, including Extended Crafting tables and Modern Industrialization machines.
 - Trusted patterns now store an opaque server recipe fingerprint and re-resolve the server recipe before planning inputs and accepting a craft; trusted and JEI-authenticated patterns are mutually disabled.

@@ -14,6 +14,7 @@
   "gui.fantasy_technology.remove_output": "左键取消此输出（至少保留一个输出）",
   "gui.fantasy_technology.ignore_data_yes": "忽略数据标签：是（右键切换）",
   "gui.fantasy_technology.ignore_data_no": "忽略数据标签：否（右键切换）",
+  "gui.fantasy_technology.transfer_unrepresentable": "配方包含无法表示的原料或产物，无法完整转移。Mekanism 化学品需要 Applied Mekanistics 支持。",
   "gui.fantasy_technology.transfer_unsupported": "该配方无法编码为幻梦样板",
   "gui.fantasy_technology.transfer_server_provider_only": "服务端可信解析已启用，请使用编码终端内置的配方供应器",
   "gui.fantasy_technology.server_recipe_provider": "服务端配方供应器",

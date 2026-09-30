@@ -14,6 +14,7 @@
   "gui.fantasy_technology.remove_output": "Left-click to remove (keep at least one output)",
   "gui.fantasy_technology.ignore_data_yes": "Ignore data: Yes (right-click to toggle)",
   "gui.fantasy_technology.ignore_data_no": "Ignore data: No (right-click to toggle)",
+  "gui.fantasy_technology.transfer_unrepresentable": "This recipe contains an unsupported ingredient or output and cannot be transferred completely. Mekanism chemicals require Applied Mekanistics.",
   "gui.fantasy_technology.transfer_unsupported": "This recipe cannot be encoded into a fantasy pattern",
   "gui.fantasy_technology.transfer_server_provider_only": "Trusted server parsing is enabled; use the encoding terminal's built-in recipe provider",
   "gui.fantasy_technology.server_recipe_provider": "Server Recipe Provider",

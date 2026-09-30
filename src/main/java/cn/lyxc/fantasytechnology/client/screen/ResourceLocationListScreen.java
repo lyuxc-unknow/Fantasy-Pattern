@@ -136,7 +136,8 @@ final class ResourceLocationListScreen extends Screen {
             this.inputLabel = inputLabel;
             this.onEntriesChanged = onEntriesChanged;
             for (String value : values) {
-                addEntry(value);
+                // The cap limits new rows, never existing configuration data.
+                super.addEntry(new ResourceLocationEntry(this, this.minecraft, value));
             }
         }
 
@@ -185,8 +186,8 @@ final class ResourceLocationListScreen extends Screen {
         }
 
         @Override
-        public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height,
-                int mouseX, int mouseY, boolean hovering, float partialTick) {
+        public void render(@NotNull GuiGraphics guiGraphics, int index, int top, int left, int width, int height,
+                           int mouseX, int mouseY, boolean hovering, float partialTick) {
             int removeWidth = 24;
             int gap = 6;
             this.input.setPosition(left, top);

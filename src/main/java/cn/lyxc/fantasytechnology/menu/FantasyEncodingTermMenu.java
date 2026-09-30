@@ -21,6 +21,7 @@ import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
 import cn.lyxc.fantasytechnology.network.DeviceCatalystsPayload;
 import cn.lyxc.fantasytechnology.network.RequestServerRecipesPayload;
+import cn.lyxc.fantasytechnology.network.SelectServerRecipePayload;
 import cn.lyxc.fantasytechnology.network.ServerRecipeCatalogPayload;
 import cn.lyxc.fantasytechnology.part.FantasyEncodingTerminalPart;
 import cn.lyxc.fantasytechnology.part.IFantasyEncodingTerminalHost;
@@ -101,14 +102,6 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     private final FakeSlot[] outputSlots = new FakeSlot[FantasyEncodingTerminalPart.OUTPUT_SLOTS];
     private final AppEngSlot blankPatternSlot;
     private final AppEngSlot encodedPatternSlot;
-
-    /// Last seen contents of the encoded pattern slot, so a newly inserted pattern is decoded exactly once.
-    private ItemStack lastEncodedPattern = ItemStack.EMPTY;
-
-    /// Set only by a server recipe-provider selection or by loading an already authenticated pattern. A normal JEI
-    /// transfer always clears it, so the encode action cannot accidentally mint a server-authenticated pattern from
-    /// client-provided stacks.
-    private Optional<Long> serverRecipeToken = Optional.empty();
 
     /// Change counter and contents of the last catalyst summary sent to the client; see {@link #syncDeviceCatalysts}.
     private long lastCatalystVersion = Long.MIN_VALUE;
@@ -195,8 +188,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         if (isServerSide()) {
             // Putting an encoded pattern into the output slot loads it back in for editing.
             ItemStack current = encodedPatternSlot.getItem();
-            if (!ItemStack.matches(current, lastEncodedPattern)) {
-                lastEncodedPattern = current.copy();
+            if (terminalHost.consumeEncodedPatternChange()) {
                 loadPattern(current);
             }
             packIgnoreFlags();
@@ -493,6 +485,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             return;
         }
 
+        Optional<Long> serverRecipeToken = terminalHost.getServerRecipeToken();
         boolean trusted = FTConfig.TRUST_SERVER_RECIPE_PARSING.get();
         if (serverRecipeToken.isPresent() != trusted) {
             // The two pattern authorization modes are mutually exclusive. In trusted mode only a selected server
@@ -501,6 +494,18 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
                     ? "gui.fantasy_technology.encode_needs_server_recipe"
                     : "gui.fantasy_technology.encode_server_recipe_disabled"));
             return;
+        }
+        if (trusted) {
+            ServerRecipe recipe = ServerRecipeProviders.findByToken(getPlayer().level(),
+                    serverRecipeToken.orElseThrow()).orElse(null);
+            if (recipe == null) {
+                notifyPlayer(Component.translatable("gui.fantasy_technology.server_recipe_stale"));
+                return;
+            }
+            // Persisted identity is authoritative; preview stacks cannot authorize a recipe.
+            inputs = recipe.inputs();
+            outputs = recipe.outputs();
+            outputsIgnore = recipe.outputsIgnore();
         }
         ItemStack encoded = FantasyPatternItem.encode(inputs, outputs, outputsIgnore, serverRecipeToken);
 
@@ -521,7 +526,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             return;
         }
 
-        lastEncodedPattern = encodedPatternSlot.getItem().copy();
+        terminalHost.consumeEncodedPatternChange();
     }
 
     /// Toggles the ignore-data flag of one encoding entry. Safe to call from either side.
@@ -534,12 +539,15 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             sendClientAction(ACTION_TOGGLE_IGNORE, entry);
             return;
         }
+        if (FTConfig.TRUST_SERVER_RECIPE_PARSING.get()) {
+            return;
+        }
         if (entry >= 0 && entry < inputSlots.length) {
-            serverRecipeToken = Optional.empty();
+            terminalHost.setServerRecipeToken(Optional.empty());
             terminalHost.setInputIgnore(entry, !terminalHost.getInputIgnore(entry));
         } else if (entry >= inputSlots.length && entry < inputSlots.length + outputSlots.length) {
             int output = entry - inputSlots.length;
-            serverRecipeToken = Optional.empty();
+            terminalHost.setServerRecipeToken(Optional.empty());
             terminalHost.setOutputIgnore(output, !terminalHost.getOutputIgnore(output));
         }
     }
@@ -562,7 +570,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         for (int i = 0; i < outputSlots.length; i++) {
             GenericStack remaining = encodedOutputs.getStack(i);
             if (i != output && remaining != null && remaining.amount() > 0) {
-                serverRecipeToken = Optional.empty();
+                terminalHost.setServerRecipeToken(Optional.empty());
                 encodedOutputs.setStack(output, null);
                 terminalHost.setOutputIgnore(output, false);
                 return;
@@ -576,7 +584,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             sendClientAction(ACTION_CLEAR);
             return;
         }
-        serverRecipeToken = Optional.empty();
+        terminalHost.setServerRecipeToken(Optional.empty());
         for (int i = 0; i < inputSlots.length; i++) {
             encodedInputs.setStack(i, null);
             terminalHost.setInputTag(i, null);
@@ -595,12 +603,12 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             sendClientAction(ACTION_DOUBLE);
             return;
         }
-        serverRecipeToken = Optional.empty();
         // All-or-nothing: if doubling any single entry would exceed the ceiling, the whole doubling is cancelled
         // so entries never end up with inconsistent multiples.
-        if (wouldOverflow()) {
+        if (FTConfig.TRUST_SERVER_RECIPE_PARSING.get() || wouldOverflow()) {
             return;
         }
+        terminalHost.setServerRecipeToken(Optional.empty());
         for (int i = 0; i < inputSlots.length; i++) {
             GenericStack stack = encodedInputs.getStack(i);
             if (stack != null && stack.amount() > 0) {
@@ -642,7 +650,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     /// than the particular one the recipe viewer happened to display.
     public void setEncodedRecipe(List<PatternIngredient> inputs, List<GenericStack> outputs,
             List<Boolean> outputsIgnore) {
-        serverRecipeToken = Optional.empty();
+        terminalHost.setServerRecipeToken(Optional.empty());
         setEncodedRecipeContents(inputs, outputs, outputsIgnore);
     }
 
@@ -651,7 +659,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
     /// only after resolving the provider on the logical server.
     public void setTrustedServerRecipe(ServerRecipe recipe) {
         setEncodedRecipeContents(recipe.inputs(), recipe.outputs(), recipe.outputsIgnore());
-        serverRecipeToken = Optional.of(recipe.token());
+        terminalHost.setServerRecipeToken(Optional.of(recipe.token()));
     }
 
     private void setEncodedRecipeContents(List<PatternIngredient> inputs, List<GenericStack> outputs,
@@ -685,14 +693,14 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
         if (data == null) {
             return;
         }
-        serverRecipeToken = Optional.empty();
+        terminalHost.setServerRecipeToken(data.serverRecipeToken());
         if (data.serverRecipeToken().isPresent() && !isClientSide()
                 && getPlayer() instanceof ServerPlayer serverPlayer) {
             ServerRecipe recipe = ServerRecipeProviders.findByToken(serverPlayer.level(),
                     data.serverRecipeToken().orElseThrow()).orElse(null);
             if (recipe != null) {
                 setEncodedRecipeContents(recipe.inputs(), recipe.outputs(), recipe.outputsIgnore());
-                serverRecipeToken = Optional.of(recipe.token());
+                terminalHost.setServerRecipeToken(Optional.of(recipe.token()));
                 return;
             }
             // Keep the stale display visible for diagnosis, but do not allow it to be encoded again.
@@ -701,7 +709,7 @@ public class FantasyEncodingTermMenu extends MEStorageMenu {
             return;
         }
         setEncodedRecipeContents(data.inputs(), data.outputs(), data.outputsIgnore());
-        serverRecipeToken = data.serverRecipeToken();
+        terminalHost.setServerRecipeToken(data.serverRecipeToken());
     }
 
     /// The ingredients as encoded, each carrying the tag its slot was filled from (if it is still valid) and the

@@ -283,7 +283,7 @@ public final class ServerRecipeProviders {
         }
     }
 
-    private static void invalidateCraftingIndex() {
+    static void invalidateCraftingIndex() {
         synchronized (CRAFTING_INDEX_LOCK) {
             craftingIndexOwner = null;
             craftingIndex = Index.EMPTY;

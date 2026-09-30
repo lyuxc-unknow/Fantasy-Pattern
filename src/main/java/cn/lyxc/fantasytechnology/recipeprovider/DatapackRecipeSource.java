@@ -47,7 +47,7 @@ final class DatapackRecipeSource {
                     .flatMap(optional -> optional)
                     .ifPresent(definition -> {
                         try {
-                            resolved.put(recipeId, definition.resolve(recipeId));
+                            resolved.put(recipeId, definition.resolve(registryAccess, recipeId));
                         } catch (RuntimeException exception) {
                             log(recipeId, exception.getMessage());
                         }

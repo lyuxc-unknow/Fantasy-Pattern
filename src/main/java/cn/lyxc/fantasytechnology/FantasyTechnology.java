@@ -16,6 +16,7 @@ import cn.lyxc.fantasytechnology.part.FantasyEncodingTerminalPart;
 import cn.lyxc.fantasytechnology.recipeprovider.DatapackRecipeProviderLoader;
 import cn.lyxc.fantasytechnology.recipeprovider.RecipeStackDefinition;
 import cn.lyxc.fantasytechnology.recipeprovider.ServerRecipeProviders;
+import cn.lyxc.fantasytechnology.recipeprovider.PatternProviderRefresh;
 import cn.lyxc.fantasytechnology.registry.*;
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
@@ -67,6 +68,7 @@ public class FantasyTechnology {
         NeoForge.EVENT_BUS.addListener(this::addReloadListeners);
         NeoForge.EVENT_BUS.addListener(this::syncDeviceRequirements);
         NeoForge.EVENT_BUS.addListener(this::clearServerState);
+        NeoForge.EVENT_BUS.addListener(PatternProviderRefresh::beforeServerTick);
     }
 
     private void addReloadListeners(AddReloadListenerEvent event) {
@@ -78,11 +80,15 @@ public class FantasyTechnology {
     /// were built from. Without this they would keep a closed single-player world reachable until the next one loads.
     private void clearServerState(ServerStoppedEvent event) {
         ServerRecipeProviders.clearServerState();
+        PatternProviderRefresh.clear();
     }
 
     /// Fires on login and after every {@code /reload}, for every affected player - which is exactly when a client's
     /// copy of the rules would otherwise be out of date.
     private void syncDeviceRequirements(OnDatapackSyncEvent event) {
+        if (event.getPlayer() == null) {
+            PatternProviderRefresh.afterReload();
+        }
         var payload = new DeviceRequirementSync(DeviceRequirements.rules());
         event.getRelevantPlayers().forEach(player -> PacketDistributor.sendToPlayer(player, payload));
     }

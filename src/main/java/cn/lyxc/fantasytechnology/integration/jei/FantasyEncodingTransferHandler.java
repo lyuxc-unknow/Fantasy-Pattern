@@ -92,6 +92,11 @@ public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferH
         List<GenericStack> inputs = read(recipeSlots, RecipeIngredientRole.INPUT, FantasyPatternData.MAX_INPUTS + 1);
         List<GenericStack> outputs = read(recipeSlots, RecipeIngredientRole.OUTPUT, FantasyPatternData.MAX_OUTPUTS + 1);
 
+        if (inputs == null || outputs == null) {
+            return helper.createUserErrorWithTooltip(Component.translatable(
+                    "gui.fantasy_technology.transfer_unrepresentable"));
+        }
+
         // A pattern needs something to consume and something to produce. Results only ever come from the display, so
         // without them there is nothing to encode no matter what the server could resolve.
         if (outputs.isEmpty() || inputs.size() > FantasyPatternData.MAX_INPUTS
@@ -148,17 +153,24 @@ public class FantasyEncodingTransferHandler implements IUniversalRecipeTransferH
         return categoryId != null && blockedCategoryIds.contains(categoryId);
     }
 
-    /// The stacks JEI is currently displaying for one role, as AE2 keys. Ingredient types other than items, fluids and
-    /// MEK chemicals are skipped: a fantasy pattern has no way to represent them.
-    private static List<GenericStack> read(IRecipeSlotsView slots, RecipeIngredientRole role, int limit) {
+    /// The stacks JEI is currently displaying for one role, as AE2 keys. Chemical keys require a bridge.
+    /// A nonempty slot that cannot be represented rejects the whole transfer.
+    @Nullable
+    static List<GenericStack> read(IRecipeSlotsView slots, RecipeIngredientRole role, int limit) {
         List<GenericStack> stacks = new ArrayList<>();
         for (IRecipeSlotView slotView : slots.getSlotViews(role)) {
             if (stacks.size() >= limit) {
                 break;
             }
-            slotView.getDisplayedIngredient().map(FantasyEncodingTransferHandler::toGenericStack)
-                    .filter(stack -> stack != null && stack.amount() > 0)
-                    .ifPresent(stacks::add);
+            if (slotView.isEmpty()) {
+                continue;
+            }
+            GenericStack stack = slotView.getDisplayedIngredient()
+                    .map(FantasyEncodingTransferHandler::toGenericStack).orElse(null);
+            if (stack == null || stack.amount() <= 0) {
+                return null;
+            }
+            stacks.add(stack);
         }
         return stacks;
     }

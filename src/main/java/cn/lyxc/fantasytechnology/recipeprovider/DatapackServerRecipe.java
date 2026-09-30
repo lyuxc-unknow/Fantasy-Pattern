@@ -8,6 +8,8 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 
@@ -52,6 +54,10 @@ public record DatapackServerRecipe(ResourceLocation category, List<RecipeStackDe
     }
 
     public ServerRecipe resolve(ResourceLocation recipeId) {
+        return resolve(RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY), recipeId);
+    }
+
+    public ServerRecipe resolve(HolderLookup.Provider registries, ResourceLocation recipeId) {
         List<PatternIngredient> resolvedInputs = inputs.stream()
                 .map(RecipeStackDefinition::resolveIngredient)
                 .toList();
@@ -69,7 +75,7 @@ public record DatapackServerRecipe(ResourceLocation category, List<RecipeStackDe
                         throw new IllegalArgumentException("Unknown catalyst item " + catalyst);
                     });
         }
-        return new ServerRecipe(PROVIDER_ID, recipeId, category, resolvedInputs, resolvedOutputs,
+        return new ServerRecipe(registries, PROVIDER_ID, recipeId, category, resolvedInputs, resolvedOutputs,
                 outputsIgnore, resolvedCatalysts);
     }
 }

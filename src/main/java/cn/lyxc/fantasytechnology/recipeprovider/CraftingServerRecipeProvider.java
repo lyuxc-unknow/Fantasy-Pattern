@@ -15,6 +15,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeInput;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
@@ -94,7 +96,8 @@ public final class CraftingServerRecipeProvider implements ServerRecipeProvider 
     }
 
     private static @Nullable ServerRecipe resolve(Level level, RecipeHolder<?> holder) {
-        if (!(holder.value() instanceof CraftingRecipe recipe) || recipe.isSpecial() || recipe.isIncomplete()) {
+        if (!(holder.value() instanceof CraftingRecipe recipe) || recipe.isSpecial() || recipe.isIncomplete()
+                || !usesIngredientRemainders(recipe)) {
             return null;
         }
         ItemStack output = recipe.getResultItem(level.registryAccess());
@@ -119,9 +122,20 @@ public final class CraftingServerRecipeProvider implements ServerRecipeProvider 
             return null;
         }
 
-        return new ServerRecipe(ID, holder.id(), CATEGORY, ingredients,
+        return new ServerRecipe(level.registryAccess(), ID, holder.id(), CATEGORY, ingredients,
                 List.of(new GenericStack(outputKey, output.getCount())), List.of(false),
                 List.of(Items.CRAFTING_TABLE));
+    }
+
+    /// Grid-level remainder overrides require a dedicated provider: the processing pattern can only express
+    /// independent item remainders. Refuse them instead of silently substituting different container rules.
+    static boolean usesIngredientRemainders(CraftingRecipe recipe) {
+        try {
+            return recipe.getClass().getMethod("getRemainingItems", RecipeInput.class).getDeclaringClass()
+                    == Recipe.class;
+        } catch (NoSuchMethodException exception) {
+            return false;
+        }
     }
 
     private static @Nullable PatternIngredient resolveIngredient(Ingredient ingredient) {

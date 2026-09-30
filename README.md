@@ -28,6 +28,10 @@
 
 ---
 
+Trusted recipe fingerprints now include complete item components. After upgrading from the old fingerprint format, reselect and encode existing trusted patterns. `/reload` and changes to trusted mode refresh loaded AE2 providers automatically. Trusted selections survive closing the terminal and world saves; amount doubling and ignore-data edits are unavailable in this mode.
+
+Crafting remainders follow the item's declared `getCraftingRemainingItem()` behavior. Durability alone does not make an ingredient reusable: a dispenser consumes its bow. Items declaring a worn remainder (such as reusable crystals) still return that remainder. The automatic crafting provider excludes recipes overriding `getRemainingItems()`, since their grid-dependent behavior cannot be expressed by these processing patterns.
+
 ## Requirements
 
 | Dependency | Required | Notes |

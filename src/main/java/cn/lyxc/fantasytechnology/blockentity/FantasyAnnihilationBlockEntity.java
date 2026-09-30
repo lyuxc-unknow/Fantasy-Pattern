@@ -22,6 +22,7 @@ import appeng.util.inv.AppEngInternalInventory;
 import appeng.util.inv.filter.IAEItemFilter;
 import cn.lyxc.fantasytechnology.FantasyTechnology;
 import cn.lyxc.fantasytechnology.config.FTConfig;
+import cn.lyxc.fantasytechnology.recipeprovider.PatternProviderRefresh;
 import cn.lyxc.fantasytechnology.crafting.FantasyCraftingPattern;
 import com.ae2vm.addon.crafting.DurableInputAdapters;
 import cn.lyxc.fantasytechnology.integration.ae2.FantasyBatchDispatchContext;
@@ -152,11 +153,15 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     @Override
     public void onChangeInventory(AppEngInternalInventory inv, int slot) {
         if (inv == patternInv) {
-            patternCache = null;
-            ICraftingProvider.requestUpdate(getMainNode());
+            refreshPatterns();
         } else if (inv == matterBallInv && !consumingMatterBallSlot) {
             saveChanges();
         }
+    }
+
+    public void refreshPatterns() {
+        patternCache = null;
+        ICraftingProvider.requestUpdate(getMainNode());
     }
 
     private boolean canConsumeMatterBalls(long crafts) {
@@ -221,9 +226,7 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
             patternCacheTrustMode = trusted;
             patternCacheModeInitialized = true;
         }
-        // Trusted patterns are resolved against the current server recipe catalogue on every provider query. This is
-        // the last point before AE2 plans its input request, so datapack/recipe reloads cannot leave an old recipe
-        // active in a cached pattern.
+        // AE2 copies this list. PatternProviderRefresh also requests re-registration after reloads and mode changes.
         if (!trusted && patternCache != null) {
             return patternCache;
         }
@@ -249,6 +252,9 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     @Override
     public boolean pushPattern(IPatternDetails patternDetails, KeyCounter[] inputHolder) {
         if (!(patternDetails instanceof FantasyCraftingPattern pattern)) {
+            return false;
+        }
+        if (pattern.getData().serverRecipeToken().isPresent() != FTConfig.TRUST_SERVER_RECIPE_PARSING.get()) {
             return false;
         }
         // Re-resolve immediately before accepting the extracted inputs. The provider query already does this, but a
@@ -526,9 +532,28 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
     @Override
     public void onReady() {
         super.onReady();
+        if (level != null && !level.isClientSide()) {
+            PatternProviderRefresh.register(this);
+        }
         if (level != null && !level.isClientSide() && !pendingOutputs.isEmpty()) {
             wakeProcessingTick();
         }
+    }
+
+    @Override
+    public void setRemoved() {
+        if (level != null && !level.isClientSide()) {
+            PatternProviderRefresh.unregister(this);
+        }
+        super.setRemoved();
+    }
+
+    @Override
+    public void onChunkUnloaded() {
+        if (level != null && !level.isClientSide()) {
+            PatternProviderRefresh.unregister(this);
+        }
+        super.onChunkUnloaded();
     }
 
     public boolean isWaitingForGrid() {

@@ -18,6 +18,7 @@ import cn.lyxc.fantasytechnology.item.PatternIngredient;
 import cn.lyxc.fantasytechnology.menu.FantasyEncodingTermMenu;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
@@ -26,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 /// The fantasy encoding terminal ("幻梦编码终端"), a cable part in the style of AE2's own pattern encoding terminal.
 ///
@@ -91,6 +93,31 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
 
     /// Whether each result slot ignores data components; display and re-editing only, results have no matching step.
     private final boolean[] outputIgnore = new boolean[OUTPUT_SLOTS];
+
+    private Optional<Long> serverRecipeToken = Optional.empty();
+    private ItemStack lastEncodedPattern = ItemStack.EMPTY;
+
+    @Override
+    public Optional<Long> getServerRecipeToken() {
+        return serverRecipeToken;
+    }
+
+    @Override
+    public void setServerRecipeToken(Optional<Long> token) {
+        serverRecipeToken = token;
+        saveChanges();
+    }
+
+    @Override
+    public boolean consumeEncodedPatternChange() {
+        ItemStack current = patternInv.getStackInSlot(ENCODED_PATTERN_SLOT);
+        if (ItemStack.matches(current, lastEncodedPattern)) {
+            return false;
+        }
+        lastEncodedPattern = current.copy();
+        saveChanges();
+        return true;
+    }
 
     public FantasyEncodingTerminalPart(IPartItem<?> partItem) {
         super(partItem);
@@ -176,6 +203,8 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
     @Override
     public void clearContent() {
         super.clearContent();
+        serverRecipeToken = Optional.empty();
+        lastEncodedPattern = ItemStack.EMPTY;
         patternInv.clear();
         encodedInputs.clear();
         encodedOutputs.clear();
@@ -190,6 +219,10 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
         encodedInputs.readFromChildTag(tag, "encodedInputs", registries);
         encodedOutputs.readFromChildTag(tag, "encodedOutputs", registries);
         patternInv.readFromNBT(tag, "patternInv", registries);
+        serverRecipeToken = tag.contains("serverRecipeToken", Tag.TAG_LONG)
+                ? Optional.of(tag.getLong("serverRecipeToken")) : Optional.empty();
+        // Keep pending insertions distinguishable from patterns whose contents were already loaded by a viewer.
+        lastEncodedPattern = ItemStack.parseOptional(registries, tag.getCompound("lastEncodedPattern"));
 
         Arrays.fill(inputTags, null);
         CompoundTag tags = tag.getCompound("inputTags");
@@ -218,6 +251,9 @@ public class FantasyEncodingTerminalPart extends AbstractTerminalPart implements
         encodedInputs.writeToChildTag(tag, "encodedInputs", registries);
         encodedOutputs.writeToChildTag(tag, "encodedOutputs", registries);
         patternInv.writeToNBT(tag, "patternInv", registries);
+        tag.put("lastEncodedPattern", lastEncodedPattern.saveOptional(registries));
+        tag.remove("serverRecipeToken");
+        serverRecipeToken.ifPresent(token -> tag.putLong("serverRecipeToken", token));
 
         CompoundTag tags = new CompoundTag();
         for (int i = 0; i < inputTags.length; i++) {

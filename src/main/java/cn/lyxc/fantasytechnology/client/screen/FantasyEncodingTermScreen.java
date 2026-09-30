@@ -75,6 +75,7 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
 
     private final Scrollbar inputScrollbar;
     private final IconButton recipeProviderButton;
+    private final IconButton doubleButton;
 
     private boolean recipeProviderOpen;
     private EditBox recipeSearch;
@@ -113,7 +114,7 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
         // button background, the hover highlight and the half-size scaling - which is why setHalfSize and
         // setDisableBackground are not called: they only feed the rendering being replaced. The button therefore
         // occupies its full 16x16 hit box, unlike the half-size clear button above it.
-        IconButton doubleButton = new IconButton(btn -> menu.doubleAmounts()) {
+        doubleButton = new IconButton(btn -> menu.doubleAmounts()) {
             @Override
             protected Icon getIcon() {
                 // Never consulted, since renderWidget below does not use it; only satisfies the abstract method.
@@ -225,7 +226,7 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
                 }
             }
         }
-        if (button == 1) {
+        if (button == 1 && !menu.trustServerRecipeParsing) {
             for (int i = 0; i < menu.getInputSlots().length; i++) {
                 FakeSlot slot = menu.getInputSlots()[i];
                 if (slot.isActive() && isHovering(slot.x, slot.y, 16, 16, x, y)) {
@@ -318,7 +319,7 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
     /// never hears about a change the server made on its own.
     private void appendIgnoreStatus(List<Component> tooltip) {
         Slot slot = hoveredSlot;
-        if (slot == null) {
+        if (slot == null || menu.trustServerRecipeParsing) {
             return;
         }
         for (int i = 0; i < menu.getInputSlots().length; i++) {
@@ -347,6 +348,7 @@ public class FantasyEncodingTermScreen extends MEStorageScreen<FantasyEncodingTe
     protected void updateBeforeRender() {
         super.updateBeforeRender();
         recipeProviderButton.setVisibility(menu.trustServerRecipeParsing);
+        doubleButton.setVisibility(!menu.trustServerRecipeParsing);
         if (recipeProviderOpen && !menu.trustServerRecipeParsing) {
             closeRecipeProvider();
         }

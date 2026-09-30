@@ -1,6 +1,7 @@
 package cn.lyxc.fantasytechnology.recipeprovider;
 
 import appeng.api.stacks.GenericStack;
+import net.minecraft.core.HolderLookup;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
 import net.minecraft.resources.ResourceLocation;
@@ -30,7 +31,7 @@ public final class ServerRecipe {
     private final List<Item> catalysts;
     private final long token;
 
-    public ServerRecipe(ResourceLocation providerId, ResourceLocation recipeId,
+    public ServerRecipe(HolderLookup.Provider registries, ResourceLocation providerId, ResourceLocation recipeId,
             @Nullable ResourceLocation categoryId, List<PatternIngredient> inputs, List<GenericStack> outputs,
             List<Boolean> outputsIgnore, List<Item> catalysts) {
         this.providerId = providerId;
@@ -57,7 +58,7 @@ public final class ServerRecipe {
             throw new IllegalArgumentException("Server recipe stack amounts must be between 1 and "
                     + Integer.MAX_VALUE);
         }
-        this.token = ServerRecipeToken.of(this.providerId, this.recipeId, this.categoryId, this.inputs,
+        this.token = ServerRecipeToken.of(registries, this.providerId, this.recipeId, this.categoryId, this.inputs,
                 this.outputs, this.outputsIgnore);
     }
 

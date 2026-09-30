@@ -1,6 +1,7 @@
 package cn.lyxc.fantasytechnology.part;
 
 import org.jetbrains.annotations.Nullable;
+import java.util.Optional;
 
 import net.minecraft.resources.ResourceLocation;
 
@@ -11,6 +12,14 @@ import appeng.util.ConfigInventory;
 /// The host of a fantasy encoding terminal menu. Implemented by {@link FantasyEncodingTerminalPart}; kept as a separate
 /// interface because AE2's {@code MenuTypeBuilder} keys menus on a host interface rather than a concrete class.
 public interface IFantasyEncodingTerminalHost extends ITerminalHost {
+
+    /// Shared, persisted identity of the selected server recipe; updated with its preview contents.
+    Optional<Long> getServerRecipeToken();
+
+    void setServerRecipeToken(Optional<Long> token);
+
+    /// Claims an encoded-slot change once across all viewers of this terminal.
+    boolean consumeEncodedPatternChange();
 
     /// The ingredients being encoded, up to 81 distinct entries, items or fluids.
     ConfigInventory getEncodedInputs();

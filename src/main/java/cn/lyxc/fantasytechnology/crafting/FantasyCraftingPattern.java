@@ -23,7 +23,7 @@ import java.util.List;
 /// can plan and execute it. Execution happens inside the fantasy annihilation block only - the pattern cannot be
 /// executed by pattern providers or molecular assemblers.
 ///
-/// Reusable ingredients - tools, infusion crystals, buckets - are declared to AE2 as container items: one goes into
+/// Ingredients with declared crafting remainders (such as infusion crystals and buckets) are container items: one goes into
 /// each craft and a worn one comes back out, which {@link Input#getRemainingKey} spells out. That single fact is
 /// what keeps a plan sane, because AE2's calculator marks any process holding container items as limited-quantity:
 /// it then plans the crafts one at a time and feeds each returned item into the next craft. A 1000-use crystal
@@ -52,26 +52,16 @@ public class FantasyCraftingPattern implements IPatternDetails {
         this.outputs = List.copyOf(data.outputs());
     }
 
-    /// Whether a craft wears this ingredient down instead of consuming it: damageable items, items with a
-    /// crafting-remaining form (buckets, reusable infusion crystals), and diggers that carry no durability at all.
+    /// Only an explicitly declared crafting remainder makes an item reusable. Durability alone says nothing
+    /// about whether a recipe consumes it (a dispenser, for example, consumes its bow).
     public static boolean isReusable(AEKey key) {
-        return DurableInputAdapters.isReusableIngredient(key);
+        return wearDown(key) != null;
     }
 
-    /// What one use of a reusable ingredient leaves behind:
-    ///
-    /// - its crafting-remaining form when it has one, so a water bucket comes back as an empty bucket;
-    /// - the same item with one more point of damage when it is damageable;
-    /// - the item unchanged when it is a tool that carries no durability at all;
-    /// - null for everything else, including the moment one more point of damage would break it - which is how AE2
-    ///   learns that this particular one is used up and that the plan needs a replacement from here on.
-    ///
-    /// The decision is made per key rather than once per ingredient, because a tagged ingredient is only classified
-    /// by its representative: a tag holding both a water bucket and a plain bucket would otherwise hand the plain
-    /// one straight back, and an ingredient that is never consumed is an ingredient duplicated for free.
     @Nullable
     static AEKey wearDown(AEKey template) {
-        return DurableInputAdapters.wearDown(template);
+        return template instanceof AEItemKey item
+                ? AEItemKey.of(item.toStack().getCraftingRemainingItem()) : null;
     }
 
     /// Turns one aggregated ingredient into an AE2 input.
@@ -194,15 +184,13 @@ public class FantasyCraftingPattern implements IPatternDetails {
             if (key.matches(input)) {
                 return true;
             }
-            return reusable && input instanceof AEItemKey item
-                    && key.representative() instanceof AEItemKey representative
-                    && item.getItem() == representative.getItem();
+            return reusable && DurableInputAdapters.isCompatibleDamageVariant(key.representative(), input);
         }
 
         @Nullable
         @Override
         public AEKey getRemainingKey(AEKey template) {
-            return reusable ? wearDown(template) : null;
+            return wearDown(template);
         }
     }
 }
