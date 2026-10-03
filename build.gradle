@@ -1,42 +1,32 @@
 plugins {
-    id 'org.glavo.gradle-wrapper-neo' version "0.2.0"
+    id 'org.glavo.gradle-wrapper-neo' version '0.2.0'
     id 'java-library'
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.143'
     id 'idea'
 }
 
-tasks.named('wrapper', Wrapper).configure {
-    distributionType = Wrapper.DistributionType.BIN
-}
-
+// ---------------------------------------------------------------------------
+// Project and Java toolchain
+// Dependency versions and CurseForge file IDs live in gradle.properties.
+// ---------------------------------------------------------------------------
 version = mod_version
 group = mod_group_id
 
-sourceSets.main.resources {
-    srcDir('src/generated/resources')
-    exclude("**/*.bbmodel")
-    exclude("src/generated/**/.cache")
-}
-
-// LGPL-3.0 compliance: the bundled AE2-VM fork (see THIRD_PARTY_NOTICES.md) must ship
-// with its license text and the notice that names it, inside the distributed jar.
-tasks.named('jar', Jar) {
-    from('LICENSES') {
-        into 'LICENSES'
-    }
-    from('THIRD_PARTY_NOTICES.md')
-}
-
-
 base {
-    archivesName = "FantasyPattern-" + minecraft_version
+    archivesName = "FantasyPattern-${minecraft_version}"
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version as int)
+}
 
+// ---------------------------------------------------------------------------
+// NeoForge development runs
+// ---------------------------------------------------------------------------
 neoForge {
     version = project.neo_version
+
     parchment {
         mappingsVersion = project.parchment_mappings_version
         minecraftVersion = project.parchment_minecraft_version
@@ -55,15 +45,18 @@ neoForge {
         }
 
         gameTestServer {
-            type = "gameTestServer"
+            type = 'gameTestServer'
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
         data {
             data()
-            // gameDirectory = project.file('run-data')
-
-            programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+            programArguments.addAll(
+                    '--mod', project.mod_id,
+                    '--all',
+                    '--output', file('src/generated/resources').absolutePath,
+                    '--existing', file('src/main/resources').absolutePath
+            )
         }
 
         configureEach {
@@ -79,106 +72,122 @@ neoForge {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Repositories and dependencies
+// ---------------------------------------------------------------------------
+repositories {
+    // Includes the locally published AE2-VM fork.
+    mavenLocal()
+    // JUnit and GuideME (required by AE2).
+    mavenCentral()
+
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content {
+            includeGroup 'maven.modrinth'
+        }
+    }
+
+    maven {
+        name = 'Jared Maven'
+        url = 'https://maven.blamejared.com'
+        content {
+            includeGroup 'mezz.jei'
+        }
+    }
+
+    maven {
+        name = 'ModMaven'
+        url = 'https://modmaven.dev/'
+        content {
+            includeGroup 'mekanism'
+        }
+    }
+
+    maven {
+        name = 'CurseMaven'
+        url = 'https://cursemaven.com'
+        content {
+            includeGroup 'curse.maven'
+        }
+    }
+}
+
 configurations {
+    // Development mods are available to local runs/tests but are not published or bundled.
     runtimeClasspath.extendsFrom localRuntime
 }
 
-repositories {
-    mavenLocal()
-    // GuideME (required AE2 dependency) is published to Maven Central
-    mavenCentral()
-    // AE2 for NeoForge 1.21.1 is published on the Modrinth Maven
-    maven {
-         name = 'Modrinth'
-         url = 'https://api.modrinth.com/maven'
-         content {
-             includeGroup 'maven.modrinth'
-         }
-    }
-    // JEI
-    maven {
-         name = 'Jared Maven'
-         url = 'https://maven.blamejared.com'
-         content {
-             includeGroup 'mezz.jei'
-         }
-    }
-    // Mekanism (its API is what we compile against)
-    maven {
-         name = 'ModMaven'
-         url = 'https://modmaven.dev/'
-         content {
-             includeGroup 'mekanism'
-         }
-    }
-    // CurseForge, for dev-run-only mods that publish nowhere else
-    maven {
-         name = 'CurseMaven'
-         url = 'https://cursemaven.com'
-         content {
-             includeGroup 'curse.maven'
-         }
-    }
-}
-
 dependencies {
-    testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.2"
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.2"
-    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.10.2"
+    // Bundled runtime implementation; license files are included by the jar task below.
+    implementation(jarJar("com.ae2vm.addon:ae2vm:${ae2vm_version}"))
 
-    compileOnly "maven.modrinth:ae2:${ae2_version}"
-    localRuntime "maven.modrinth:ae2:${ae2_version}"
-    compileOnly "maven.modrinth:applied-mekanistics:${applied_mekanistics_version}"
-    localRuntime "maven.modrinth:applied-mekanistics:${applied_mekanistics_version}"
-
+    // These mods publish separate API artifacts; local runs use their full implementations.
     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
-    localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
-
     compileOnly "mekanism:Mekanism:${mekanism_version}:api"
+
+    // Integrations compiled against the same artifact used in development.
+    // Required/optional mod relationships remain in src/main/templates/META-INF/neoforge.mods.toml.
+    [
+            "maven.modrinth:ae2:${ae2_version}",
+            "maven.modrinth:applied-mekanistics:${applied_mekanistics_version}",
+            "curse.maven:omnisequence-transfinite-1624558:${omnisequence_file}",
+            "curse.maven:data-energistics-1565514:${data_energistics_file}",
+            "curse.maven:applied-enhancements-1665696:${applied_enhancements_file}"
+    ].each { notation ->
+        compileOnly notation
+        localRuntime notation
+    }
+
+    // Runtime implementations and companions of the APIs above.
+    localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
     localRuntime "mekanism:Mekanism:${mekanism_version}"
     localRuntime "mekanism:Mekanism:${mekanism_version}:additions"
     localRuntime "mekanism:Mekanism:${mekanism_version}:generators"
     localRuntime "mekanism:Mekanism:${mekanism_version}:tools"
-
-    compileOnly "curse.maven:omnisequence-transfinite-1624558:9043224"
-    localRuntime "curse.maven:omnisequence-transfinite-1624558:9043224"
-    // Data Energistics: optional. The Trinity Data Core crafting CPU has its own counted dispatch API, which is what
-    // the fantasy annihilation block has to implement to be offered a batch at all.
-    compileOnly "curse.maven:data-energistics-1565514:9015488"
-    localRuntime "curse.maven:data-energistics-1565514:9015488"
-    compileOnly "curse.maven:applied-enhancements-1665696:9043227"
-    localRuntime "curse.maven:applied-enhancements-1665696:9043227"
-
-    implementation(jarJar("com.ae2vm.addon:ae2vm:2.0.3+modified"))
-
-    // runtime only
     localRuntime "org.appliedenergistics:guideme:${guideme_version}"
+
+    // Development/modpack compatibility fixtures; no compile-time dependency.
     localRuntime "maven.modrinth:create:${create_version}"
-    localRuntime "maven.modrinth:modern-industrialization:2.5.5"
-    localRuntime "curse.maven:alltheleaks-1091339:8553655"
-    localRuntime "maven.modrinth:mekanism_extra:1.21.1-1.4.0"
-    localRuntime "maven.modrinth:cucumber:8.0.16"
-    localRuntime "maven.modrinth:mystical-agriculture:8.0.27"
-//    localRuntime "maven.modrinth:neoecoae:21.2.0"
-    localRuntime "maven.modrinth:ldlib:mc1.21.1-2.2.40-neoforge"
-    localRuntime "curse.maven:glodium-957920:5821676"
-    localRuntime "curse.maven:ex-pattern-provider-892005:8511901"
-    localRuntime "curse.maven:ae2-jei-integration-${ae2_jei_integration_project}:${ae2_jei_integration_file}"
-    localRuntime "curse.maven:thunderbolt-core-1631756:9024603"
+    localRuntime "maven.modrinth:modern-industrialization:${modern_industrialization_version}"
+    localRuntime "maven.modrinth:mekanism_extra:${mekanism_extra_version}"
+    localRuntime "maven.modrinth:cucumber:${cucumber_version}"
+    localRuntime "maven.modrinth:mystical-agriculture:${mystical_agriculture_version}"
+    localRuntime "maven.modrinth:ldlib:${ldlib_version}"
+    localRuntime "curse.maven:alltheleaks-1091339:${alltheleaks_file}"
+    localRuntime "curse.maven:glodium-957920:${glodium_file}"
+    localRuntime "curse.maven:ex-pattern-provider-892005:${ex_pattern_provider_file}"
+    localRuntime "curse.maven:ae2-jei-integration-1074338:${ae2_jei_integration_file}"
+    localRuntime "curse.maven:thunderbolt-core-1631756:${thunderbolt_core_file}"
+
+    // Unit tests.
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junit_jupiter_version}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junit_jupiter_version}"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:${junit_platform_version}"
 }
 
-// ModDev wires Minecraft and optional-mod APIs to the main source set only. Codec unit tests exercise those API
-// types directly, so give the test source set the same transformed compile/runtime classpaths.
-sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
-sourceSets.test.runtimeClasspath += sourceSets.main.runtimeClasspath
-
-tasks.withType(Test).configureEach {
-    useJUnitPlatform()
+// ---------------------------------------------------------------------------
+// Generated resources and mod metadata
+// ---------------------------------------------------------------------------
+sourceSets {
+    main {
+        resources {
+            srcDir('src/generated/resources')
+            exclude('**/*.bbmodel')
+            exclude('src/generated/**/.cache')
+        }
+    }
+    test {
+        // ModDev wires transformed Minecraft/mod APIs to main only; unit tests exercise those types directly.
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
 }
 
-var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
-    var replaceProperties = [
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def replaceProperties = [
         minecraft_version      : minecraft_version,
         minecraft_version_range: minecraft_version_range,
         neo_version            : neo_version,
@@ -187,17 +196,43 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
         mod_name               : mod_name,
         mod_license            : mod_license,
         mod_version            : mod_version,
-        ae2_version            : ae2_version,
+        ae2_version            : ae2_version
     ]
     inputs.properties replaceProperties
     expand replaceProperties
-    from "src/main/templates"
-    into "build/generated/sources/modMetadata"
+    from('src/main/templates')
+    into(layout.buildDirectory.dir('generated/sources/modMetadata'))
 }
 
-sourceSets.main.resources.srcDir generateModMetadata
-neoForge.ideSyncTask generateModMetadata
+sourceSets.main.resources.srcDir(generateModMetadata)
+neoForge.ideSyncTask(generateModMetadata)
 
+// ---------------------------------------------------------------------------
+// Compilation, tests and packaging
+// ---------------------------------------------------------------------------
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+tasks.named('wrapper', Wrapper).configure {
+    distributionType = Wrapper.DistributionType.BIN
+}
+
+// LGPL-3.0 compliance: the bundled AE2-VM fork must ship with its license and attribution.
+tasks.named('jar', Jar) {
+    from('LICENSES') {
+        into('LICENSES')
+    }
+    from('THIRD_PARTY_NOTICES.md')
+}
+
+// ---------------------------------------------------------------------------
+// Publication and IDE support
+// ---------------------------------------------------------------------------
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
@@ -209,10 +244,6 @@ publishing {
             url "file://${project.projectDir}/repo"
         }
     }
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
 }
 
 idea {
