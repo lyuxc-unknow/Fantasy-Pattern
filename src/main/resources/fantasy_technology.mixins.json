@@ -11,7 +11,8 @@
     "MolecularBatchCraftingProviderMixin",
     "OmniBatchDispatchMixin",
     "AelisPlannerMixin",
-    "PatternProviderLogicMixin"
+    "PatternProviderLogicMixin",
+    "CreativeCellInventoryMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -141,9 +141,11 @@ dependencies {
     localRuntime "mekanism:Mekanism:${mekanism_version}:generators"
     localRuntime "mekanism:Mekanism:${mekanism_version}:tools"
 
-    compileOnly "curse.maven:omnisequence-transfinite-1624558:8941493"
-    compileOnly "curse.maven:applied-enhancements-1665696:8939389"
-    localRuntime "curse.maven:applied-enhancements-1665696:8939389"
+    compileOnly "curse.maven:omnisequence-transfinite-1624558:9043224"
+    localRuntime "curse.maven:omnisequence-transfinite-1624558:9043224"
+    compileOnly "curse.maven:applied-enhancements-1665696:9043227"
+    localRuntime "curse.maven:applied-enhancements-1665696:9043227"
+
     implementation(jarJar("com.ae2vm.addon:ae2vm:2.0.3+modified"))
 
     // runtime only
@@ -154,12 +156,13 @@ dependencies {
     localRuntime "maven.modrinth:mekanism_extra:1.21.1-1.4.0"
     localRuntime "maven.modrinth:cucumber:8.0.16"
     localRuntime "maven.modrinth:mystical-agriculture:8.0.27"
-    localRuntime "maven.modrinth:neoecoae:21.2.0-beta4"
-    localRuntime "maven.modrinth:ldlib:mc1.21.1-2.2.32-neoforge"
+//    localRuntime "maven.modrinth:neoecoae:21.2.0"
+    localRuntime "maven.modrinth:ldlib:mc1.21.1-2.2.40-neoforge"
     localRuntime "curse.maven:glodium-957920:5821676"
     localRuntime "curse.maven:ex-pattern-provider-892005:8511901"
     localRuntime "curse.maven:ae2-jei-integration-${ae2_jei_integration_project}:${ae2_jei_integration_file}"
-    localRuntime "curse.maven:omnisequence-transfinite-1624558:8941493"
+    localRuntime "curse.maven:data-energistics-1565514:9015488"
+    localRuntime "curse.maven:thunderbolt-core-1631756:9024603"
 }
 
 // ModDev wires Minecraft and optional-mod APIs to the main source set only. Codec unit tests exercise those API
