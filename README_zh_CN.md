@@ -42,6 +42,7 @@
 | [Applied Energistics 2](https://modrinth.com/mod/ae2) | ✅ | `19.2.x` |
 | [JEI](https://modrinth.com/mod/jei) | ✅ 必需 | 向编码终端转移配方 |
 | [OmniSequence-Transfinite](https://github.com/AyaYumi/OmniSequence-Transfinite) | 🔶 可选 | `1.3.9+`；启用快速规划与批量发配 |
+| [Data Energistics](https://www.curseforge.com/minecraft/mc-mods/data-energistics) | 🔶 可选 | 其三位一体数位化核心 CPU 可批量执行幻梦样板 |
 | [AE2-VM modified](https://github.com/lyuxc-unknow/AE2-VM-Fantasy-Pattern-Fork) | ✅ | 内嵌；负责耐久输入规划 |
 | [Mekanism](https://modrinth.com/mod/mekanism) | 🔶 可选 | 样板中的化学品输入/输出 |
 | [Applied Mekanistics](https://modrinth.com/mod/applied-mekanistics) | 🔶 可选 | 把化学品桥接进 AE2 |
@@ -90,7 +91,8 @@
 ## 兼容性说明
 
 - **快速合成规划**在安装 OmniSequence 并启用万物演算核心时由 Omni 提供。幻梦样板会进入其配方树聚合规划器；规划模式、节点与时间预算、诊断、回退和 CPU 记账均由 Omni 负责。未安装 OmniSequence 时，AE2 使用自身的普通计算与发配行为，耐久输入兼容仍由内嵌 `ae2vm-modified` 提供。
-- **批量执行**在 Omni 可用时使用其原生批量发配。耐久与可复用输入直接采用 Omni 与内嵌 `ae2vm-modified` 生成的精确计划，包括工具池中每把工具的磨损。批量合成 N 次消耗 N 次燃料额度。当 `consume_fuel=false` 时，无限任务会拆分为有限批次，避免深层递归配方在兼容路径中发生整数溢出；`batch_dispatch_enabled` 仍可关闭批量发配，修改后需要重新进入存档或重启游戏。
+- **批量执行**使用合成 CPU 自身的计数发配：安装 OmniSequence 时走其原生批量发配，使用 Data Energistics 的三位一体数位化核心作为 CPU 时走它的计数发配。耐久与可复用输入的精确计划（含工具池中每把工具的磨损）由 Omni 与内嵌 `ae2vm-modified` 提供。批量合成 N 次消耗 N 次燃料额度。当 `consume_fuel=false` 时，无限任务会拆分为有限批次，避免深层递归配方在兼容路径中发生整数溢出；`batch_dispatch_enabled` 仍可关闭批量发配，修改后需要重新进入存档或重启游戏。
+- **Data Energistics**：幻梦样板可通过三位一体数位化核心的计数发配 API 批量执行。没有该对接时，这个 CPU 每次发配只给幻梦寂灭方块一次合成，深层递归配方因此无法推进。原料声明了合成余物的样板（桶、可复用工具）在该 CPU 上仍走单次合成路径，因为计数发配会在供应器执行前一次性抽取整批原料，目前无法处理"每次合成各返还一份余物"的记账。Data Energistics 自带的样板供应器批量投递不会作用到幻梦样板——幻梦样板本就无法放入 AE2 样板供应器。
 - **现代化工业及其他机器模组**：配方转移使用 JEI 显示的数量，多数量机器配方（如 `2x 铁板`）可正确填入。
 - **AllTheLeaks**：若某模组的 `getIngredients()` 具有 AllTheLeaks 锁定的副作用，服务端会回退到显示配方而不是失败——首次发生会记录一条警告，并在本次会话内记住该配方类型。
 - **JEI tag 信息页**（`minecraft:tag_recipes/*`）与 **P2P 谐调页面**（来自 AE2-JEI-Integration 附属）默认禁止转移，因为它们只是浏览页，并非配方。可在服务端配置中通过 `blocked_jei_category_ids` 配置 category ID 列表；修改后需要退出并重新进入存档或重启游戏。

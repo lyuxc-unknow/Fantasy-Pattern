@@ -4,6 +4,7 @@
 
 ### Added
 
+- Fantasy patterns now batch on Data Energistics' Trinity Data Core crafting CPU. That CPU does not use AE2's crafting CPU logic, so OmniSequence's batch dispatch - and this mod's bridge into it - never ran for it, and it offered the fantasy annihilation block exactly one craft per push. The block now implements Data Energistics' counted crafting dispatch: it reports how many repetitions it can take, admits that count, and performs the whole batch, so a deep recursive recipe such as sixteen-times compressed cobblestone makes progress there as well. Patterns whose ingredients declare a crafting remainder (buckets, reusable tools) stay on the single-craft path, because a counted batch extracts every craft's inputs up front and per-craft remainders are not modelled yet.
 - Added the `trust_server_recipe_parsing` server option, disabled by default. When enabled, JEI transfer is rejected and the encoding terminal uses a searchable server-backed recipe provider instead. Note that switching this option invalidates every fantasy pattern already encoded in the world; the pattern tooltip now says so.
 - Added a trusted crafting-table provider and a datapack DSL under `data/<namespace>/recipe_provider/*.json`, with item, fluid, optional Mekanism chemical, tag, amount, output-ignore, catalyst, and NeoForge-condition support.
 - Added public extension points for custom server recipe providers and additional AE key stack types.

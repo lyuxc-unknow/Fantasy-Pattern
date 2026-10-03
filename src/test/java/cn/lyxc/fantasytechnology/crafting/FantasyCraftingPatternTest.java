@@ -1,7 +1,9 @@
 package cn.lyxc.fantasytechnology.crafting;
 
 import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
+import appeng.api.stacks.KeyCounter;
 import cn.lyxc.fantasytechnology.MinecraftTestBootstrap;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.PatternIngredient;
@@ -40,6 +42,34 @@ class FantasyCraftingPatternTest {
     void returnsDeclaredBucketRemainder() {
         var water = AEItemKey.of(Items.WATER_BUCKET);
         assertEquals(AEItemKey.of(Items.BUCKET), pattern(water).getInputs()[0].getRemainingKey(water));
+    }
+
+    @Test
+    void onlyPatternsWithoutCraftingRemaindersMayBeBatchDispatched() {
+        // A plain consumable leaves nothing behind, so a batch of N crafts needs no remainder accounting.
+        assertFalse(pattern(AEItemKey.of(Items.COBBLESTONE)).hasCraftingRemainders());
+        // Durability alone is not a remainder: the dispenser consumes its bow.
+        assertFalse(pattern(AEItemKey.of(Items.BOW)).hasCraftingRemainders());
+        // A declared remainder is what counted batch dispatch cannot account for yet, so it stays single-craft.
+        assertTrue(pattern(AEItemKey.of(Items.WATER_BUCKET)).hasCraftingRemainders());
+    }
+
+    @Test
+    void rechecksTheKeysTheCpuActuallyExtracted() {
+        // A pattern only knows the alternatives it was decoded with, while the CPU extracts from live storage: a tag
+        // can gain a member afterwards, and a data-insensitive ingredient accepts variants whose remainder differs.
+        var cobblestone = pattern(AEItemKey.of(Items.COBBLESTONE));
+        assertFalse(cobblestone.hasCraftingRemainders());
+        assertFalse(cobblestone.extractedInputsHaveRemainders(
+                new KeyCounter[]{counted(AEItemKey.of(Items.COBBLESTONE), 8)}));
+        assertTrue(cobblestone.extractedInputsHaveRemainders(
+                new KeyCounter[]{counted(AEItemKey.of(Items.WATER_BUCKET), 8)}));
+    }
+
+    private static KeyCounter counted(AEKey key, long amount) {
+        KeyCounter counter = new KeyCounter();
+        counter.add(key, amount);
+        return counter;
     }
 
     @Test

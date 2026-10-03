@@ -272,6 +272,9 @@ public class FantasyAnnihilationBlockEntity extends AENetworkedInvBlockEntity
         }
 
         var batchContext = FantasyBatchDispatchContext.current();
+        // A single craft unless a crafting CPU handed this block a batch: the CPU extracts the inputs for exactly the
+        // number of repetitions it accounts for, so crafting more than one here would produce items the network never
+        // paid for.
         long crafts = batchContext == null ? 1 : batchContext.craftCount();
         KeyCounter stagedOutputs = new KeyCounter();
         try {

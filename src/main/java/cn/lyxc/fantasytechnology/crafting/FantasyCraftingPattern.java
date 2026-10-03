@@ -4,6 +4,7 @@ import appeng.api.crafting.IPatternDetails;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
+import appeng.api.stacks.KeyCounter;
 import cn.lyxc.fantasytechnology.item.FantasyPatternData;
 import cn.lyxc.fantasytechnology.item.FantasyPatternItem;
 import cn.lyxc.fantasytechnology.config.FTConfig;
@@ -37,19 +38,79 @@ public class FantasyCraftingPattern implements IPatternDetails {
     private final IInput[] inputs;
     private final List<GenericStack> outputs;
 
+    /// Whether any ingredient hands something back after a craft. Computed once here because the answer is a property
+    /// of the recipe, while batch dispatch asks for it on every dispatch window.
+    private final boolean craftingRemainders;
+
     public FantasyCraftingPattern(AEItemKey definition, FantasyPatternData data) {
         this.definition = definition;
         this.data = data;
 
+        boolean remainders = false;
         List<IInput> inputList = new ArrayList<>();
         for (var entry : data.requiredIngredients().entrySet()) {
             IInput input = createInput(entry.getKey(), entry.getValue());
             if (input != null) {
                 inputList.add(input);
+                remainders |= declaresRemainder(input);
             }
         }
         this.inputs = inputList.toArray(IInput[]::new);
         this.outputs = List.copyOf(data.outputs());
+        this.craftingRemainders = remainders;
+    }
+
+    /// Whether any ingredient (or any alternative of a tagged one) leaves an item behind: a bucket, a worn tool, a
+    /// reusable crystal.
+    ///
+    /// Counted batch dispatch extracts the inputs of the whole batch before the provider runs and hands it a
+    /// single-craft prototype, so a batch of N crafts would have to hand back N remainders - and, for tools, wear the
+    /// item once per craft. That is not modelled, so {@link #hasCraftingRemainders()} keeps such patterns on the
+    /// single-craft path, where "one use leaves one remainder" is already correct. It answers from the alternatives
+    /// known when the pattern was decoded; {@link #extractedInputsHaveRemainders(KeyCounter[])} closes the cases where
+    /// the CPU ends up extracting something else.
+    ///
+    /// The test is the same pure function of the extracted key that the single-craft path uses to stage remainders
+    /// ({@code DurableInputAdapters.wearDownBy}), so the two paths agree about what a remainder is.
+    private static boolean declaresRemainder(IInput input) {
+        for (GenericStack possible : input.getPossibleInputs()) {
+            if (DurableInputAdapters.wearDownBy(input, possible.what(), 1) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Whether any ingredient declares a crafting remainder. See {@link #declaresRemainder(IInput)}.
+    public boolean hasCraftingRemainders() {
+        return craftingRemainders;
+    }
+
+    /// Whether any key in an extracted input holder leaves something behind: the same question as
+    /// {@link #hasCraftingRemainders()}, asked about the keys a crafting CPU actually extracted rather than about the
+    /// alternatives this pattern knew when it was decoded.
+    ///
+    /// The two can disagree. A tagged ingredient enumerates its tag once, when the pattern is decoded, while matching
+    /// re-reads the tag at dispatch time; a data-insensitive ingredient accepts any key with the same item, and an item
+    /// may declare its remainder per stack. Either way the CPU can extract a key that hands something back while
+    /// {@link #hasCraftingRemainders()} says nothing does - and a counted batch would then leave the CPU waiting for
+    /// remainders that never arrive. Asking this before batching turns that into a single craft per push instead.
+    public boolean extractedInputsHaveRemainders(@Nullable KeyCounter[] extracted) {
+        if (extracted == null) {
+            return false;
+        }
+        for (int index = 0; index < extracted.length && index < inputs.length; index++) {
+            KeyCounter counter = extracted[index];
+            if (counter == null) {
+                continue;
+            }
+            for (var entry : counter) {
+                if (DurableInputAdapters.wearDownBy(inputs[index], entry.getKey(), 1) != null) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /// Only an explicitly declared crafting remainder makes an item reusable. Durability alone says nothing

@@ -39,7 +39,9 @@ public final class FTConfig {
 
     static {
         BATCH_DISPATCH_ENABLED = BUILDER
-                .comment("Allow OmniSequence to dispatch several repetitions of one fantasy pattern in a batch.",
+                .comment("Allow a compatible crafting CPU to dispatch several repetitions of one fantasy pattern in a batch.",
+                        "OmniSequence and Data Energistics' Trinity Data Core both use this switch; a CPU without counted",
+                        "dispatch support stays on the single-craft path.",
                         "When consume_fuel is disabled, unbounded work is split into finite safe batches.",
                         "Changes require re-entering the world or restarting the game.")
                 .translation("fantasy_technology.configuration.batch_dispatch_enabled")
