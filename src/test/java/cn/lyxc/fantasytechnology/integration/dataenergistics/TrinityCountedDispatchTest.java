@@ -34,16 +34,19 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.fml.config.IConfigSpec;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import javax.annotation.ParametersAreNonnullByDefault;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@ParametersAreNonnullByDefault
 class TrinityCountedDispatchTest {
 
     @BeforeEach
@@ -253,7 +256,7 @@ class TrinityCountedDispatchTest {
                 List.of(new GenericStack(prototype[0].getFirstEntry().getKey(), 1)));
         var boundConstructor = TrinityBoundPatternDetails.class.getDeclaredConstructor(IPatternDetails.class, List.class);
         boundConstructor.setAccessible(true);
-        var bound = (TrinityBoundPatternDetails) boundConstructor.newInstance(pattern, List.of(binding));
+        var bound = boundConstructor.newInstance(pattern, List.of(binding));
         assertFalse(bound.preservesNativeInputs(pattern));
 
         var snapshot = new ProviderCapacitySnapshot(new CraftingProviderId(1, 1),
@@ -298,8 +301,8 @@ class TrinityCountedDispatchTest {
         }
 
         @Override
-        public ObjectList<CountedCraftingCapacity> captureCapacityFast(IPatternDetails details, KeyCounter[] prototype,
-                long requestedCrafts) {
+        public @NotNull ObjectList<CountedCraftingCapacity> captureCapacityFast(IPatternDetails details, KeyCounter[] prototype,
+                                                                                long requestedCrafts) {
             return TrinityCountedDispatch.captureCapacity(this, details, prototype, requestedCrafts);
         }
 

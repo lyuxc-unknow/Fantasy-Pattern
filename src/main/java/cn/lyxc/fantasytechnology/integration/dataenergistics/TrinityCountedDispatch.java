@@ -12,6 +12,7 @@ import com.fish_dan_.data_energistics.api.crafting.dispatch.CountedCraftingRouti
 import com.fish_dan_.data_energistics.api.crafting.dispatch.CountedCraftingTarget;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectList;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.OptionalLong;
@@ -134,7 +135,7 @@ public final class TrinityCountedDispatch {
         }
 
         @Override
-        public boolean commit(KeyCounter[] prototype) {
+        public boolean commit(KeyCounter @NotNull [] prototype) {
             if (count < 2) {
                 // FantasyBatchDispatchContext only accepts a batch of two or more; a single craft needs no bridge.
                 return host.pushPattern(pattern, prototype);
