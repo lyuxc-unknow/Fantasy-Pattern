@@ -6,6 +6,7 @@ import cn.lyxc.fantasytechnology.blockentity.FantasyAnnihilationBlockEntity;
 import cn.lyxc.fantasytechnology.integration.dataenergistics.TrinityCountedDispatch;
 import com.fish_dan_.data_energistics.api.crafting.dispatch.CountedCraftingAdmission;
 import com.fish_dan_.data_energistics.api.crafting.dispatch.CountedCraftingCapacity;
+import com.fish_dan_.data_energistics.api.crafting.dispatch.CountedCraftingTarget;
 import com.fish_dan_.data_energistics.common.crafting.trinity.dispatch.provider.CountedCraftingProvider;
 import it.unimi.dsi.fastutil.objects.ObjectList;
 import org.jetbrains.annotations.Nullable;
@@ -40,6 +41,14 @@ public abstract class TrinityCountedCraftingProviderMixin implements CountedCraf
             long requestedCount) {
         return TrinityCountedDispatch.prepareBatch(fantasyTechnology$self(), patternDetails, prototype,
                 requestedCount);
+    }
+
+    @Nullable
+    @Override
+    public CountedCraftingAdmission prepareBatchForTarget(IPatternDetails patternDetails, KeyCounter[] prototype,
+            long requestedCount, CountedCraftingTarget target) {
+        return TrinityCountedDispatch.prepareBatchForTarget(fantasyTechnology$self(), patternDetails, prototype,
+                requestedCount, target);
     }
 
     @Unique

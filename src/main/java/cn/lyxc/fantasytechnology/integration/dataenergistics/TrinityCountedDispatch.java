@@ -39,14 +39,15 @@ import java.util.OptionalLong;
 /// A pattern is only batched when neither its ingredients nor the keys the CPU actually extracted declare a crafting
 /// remainder: a batch would have to hand back one remainder per craft, which this bridge does not model. Everything
 /// else - no grid, no fuel, a pattern the block no longer offers - degrades to an empty capacity, which keeps the CPU
-/// on its native single-craft path instead of marking the provider unavailable.
+/// on its single-craft fallback instead of marking the provider unavailable. Bound inputs can make that fallback use
+/// this adapter rather than the CPU's native admission, so a one-craft request must remain admissible here as well.
 public final class TrinityCountedDispatch {
 
     private TrinityCountedDispatch() {
     }
 
-    /// The capacity of one pattern, or an empty list when that pattern has to stay on the CPU's native single-craft
-    /// path. {@code extracted} is the CPU's own one-craft extraction, which is what decides the remainder question.
+    /// The capacity of one pattern, or an empty list when that pattern has to use the CPU's single-craft fallback.
+    /// {@code extracted} is the CPU's own one-craft extraction, which is what decides the remainder question.
     public static ObjectList<CountedCraftingCapacity> captureCapacity(FantasyAnnihilationBlockEntity host,
             IPatternDetails patternDetails, KeyCounter[] extracted, long requestedCrafts) {
         FantasyCraftingPattern pattern = batchable(patternDetails, extracted);
@@ -57,7 +58,7 @@ public final class TrinityCountedDispatch {
         long limit = host.getMaxBatchCrafts(pattern, requestedCrafts);
         if (limit <= 0) {
             // A known zero would make the CPU treat the provider as permanently unavailable and stop dispatching to
-            // it. An empty capacity list instead keeps the native single-craft path, where pushPattern still decides
+            // it. An empty capacity list instead keeps the single-craft fallback, where pushPattern still decides
             // per craft - the same behaviour this block had before the integration existed.
             return new ObjectArrayList<>();
         }
@@ -68,12 +69,21 @@ public final class TrinityCountedDispatch {
         return capacities;
     }
 
-    /// The batch this block admits for one physical dispatch, or null when it cannot take a counted batch.
+    /// The admission for one physical dispatch. Single-craft requests retain native {@code pushPattern} validation;
+    /// only a request for multiple crafts has to satisfy the batch capability and capacity checks.
     @Nullable
     public static CountedCraftingAdmission prepareBatch(FantasyAnnihilationBlockEntity host,
             IPatternDetails patternDetails, KeyCounter[] extracted, long requestedCount) {
-        FantasyCraftingPattern pattern = batchable(patternDetails, extracted);
-        if (pattern == null) {
+        if (!(patternDetails instanceof FantasyCraftingPattern pattern) || requestedCount <= 0) {
+            return null;
+        }
+        if (requestedCount == 1) {
+            // Trinity cannot use its native admission for non-native bound inputs, even after an empty capacity
+            // capture requested single-craft fallback. Keep that fallback working with remainders or batching off;
+            // commit still lets pushPattern validate the recipe mode, grid, fuel and pending outputs.
+            return new BatchAdmission(host, pattern, 1);
+        }
+        if (batchable(pattern, extracted) == null) {
             return null;
         }
 
@@ -81,6 +91,21 @@ public final class TrinityCountedDispatch {
         // state, and another CPU may have dispatched to this same block between capture and preparation.
         long count = host.getMaxBatchCrafts(pattern, requestedCount);
         return count <= 0 ? null : new BatchAdmission(host, pattern, count);
+    }
+
+    /// Accept the aggregate provider target and its single-craft fallback route, but no external machine targets.
+    @Nullable
+    public static CountedCraftingAdmission prepareBatchForTarget(FantasyAnnihilationBlockEntity host,
+            IPatternDetails patternDetails, KeyCounter[] extracted, long requestedCount, CountedCraftingTarget target) {
+        // An empty capacity capture produces an UNKNOWN snapshot of route "provider". Trinity converts that to a
+        // non-provider-scoped public target, which the interface's default method rejects before prepareBatch runs.
+        // It still names this block, but is only a single-craft fallback, never a source of batch capacity.
+        if (!target.providerScoped()
+                && (requestedCount != 1 || target.machineIdentity().isPresent()
+                        || !target.stableIdentity().equals(CountedCraftingTarget.provider().stableIdentity()))) {
+            return null;
+        }
+        return prepareBatch(host, patternDetails, extracted, requestedCount);
     }
 
     /// The patterns this integration is allowed to batch, or null when the pattern must not be batched.
